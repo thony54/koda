@@ -5,11 +5,12 @@ import { PageHeader, EmptyState } from '@/components/layout/PageHeader';
 import {
   Button, Input, Select, Badge, Modal, Table, THead, TBody, TR, TH, TD,
 } from '@/components/ui';
+import { useQueryClient } from '@tanstack/react-query';
 import { useJobs, useJobMutations } from '@/hooks/useJobs';
 import { useSources } from '@/hooks/useAdmin';
 import { useUIStore } from '@/store/uiStore';
 import { timeAgo } from '@/lib/format';
-import type { SearchJob, JobInput } from '@/lib/data/jobs';
+import { runJobNow, type SearchJob, type JobInput } from '@/lib/data/jobs';
 
 const statusVariant: Record<string, 'success' | 'warning' | 'error' | 'default' | 'info'> = {
   ok: 'success', corriendo: 'info', pendiente: 'default', error: 'error', cancelado: 'warning',
@@ -22,7 +23,25 @@ export default function Jobs() {
   const { data: sources } = useSources();
   const { upsert, remove } = useJobMutations();
   const toast = useUIStore((s) => s.toast);
+  const qc = useQueryClient();
   const [editing, setEditing] = useState<(JobInput & { id?: string }) | null>(null);
+  const [running, setRunning] = useState<string | null>(null);
+
+  async function runNow(j: SearchJob) {
+    setRunning(j.id);
+    toast(`Ejecutando "${j.nombre}"…`, 'info');
+    try {
+      const r = await runJobNow(j.id);
+      toast(`"${j.nombre}": ${r.encontrados} encontrados, ${r.nuevos} nuevos, ${r.calientes} calientes`, 'success');
+      qc.invalidateQueries({ queryKey: ['jobs'] });
+      qc.invalidateQueries({ queryKey: ['prospects'] });
+      qc.invalidateQueries({ queryKey: ['dashboard'] });
+    } catch (e) {
+      toast(`Error al ejecutar: ${e instanceof Error ? e.message : 'desconocido'}`, 'error');
+    } finally {
+      setRunning(null);
+    }
+  }
 
   async function save() {
     if (!editing) return;
@@ -50,7 +69,7 @@ export default function Jobs() {
         <EmptyState
           icon={<Search className="h-6 w-6" />}
           title="Aún no hay búsquedas configuradas"
-          hint="Crea una búsqueda eligiendo fuente, consulta, ciudad y horario. La ejecución automática (collector) se activa en la Fase 2; por ahora podés definirlas y cargar por CSV."
+          hint="Crea una búsqueda eligiendo fuente, consulta, ciudad y horario. Con las Edge Functions desplegadas, 'Ejecutar ahora' corre el pipeline collector → normalizer → scorer. OSM es gratis; Google Places requiere API key."
           action={<Button size="sm" onClick={() => setEditing({ ...emptyJob })}><Plus className="h-4 w-4" /> Nueva búsqueda</Button>}
         />
       ) : (
@@ -78,7 +97,9 @@ export default function Jobs() {
                 <TD>{j.ultimo ? <Badge variant={statusVariant[j.ultimo.status] ?? 'default'}>{j.ultimo.status}</Badge> : <Badge>{j.activo ? 'activa' : 'inactiva'}</Badge>}</TD>
                 <TD>
                   <div className="flex items-center gap-1">
-                    <button title="Ejecutar ahora (Fase 2)" onClick={() => toast('La ejecución automática se conecta en la Fase 2 (Edge Function collector).', 'info')} className="p-1 text-ink-muted hover:text-[var(--primary-orange)]"><Play className="h-4 w-4" /></button>
+                    <button title="Ejecutar ahora" disabled={running === j.id} onClick={() => runNow(j)} className="p-1 text-ink-muted hover:text-[var(--primary-orange)] disabled:opacity-50">
+                      {running === j.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
+                    </button>
                     <Link to={`/busquedas/${j.id}/runs`} title="Historial" className="p-1 text-ink-muted hover:text-ink-primary"><History className="h-4 w-4" /></Link>
                     <button title="Editar" onClick={() => setEditing({ id: j.id, nombre: j.nombre, source_id: j.source_id, query: j.query, ciudad: j.ciudad ?? '', radio_metros: j.radio_metros ?? 15000, cron: j.cron ?? '', activo: j.activo, max_resultados: j.max_resultados ?? 60 })} className="p-1 text-ink-muted hover:text-ink-primary text-xs">✎</button>
                     <button title="Eliminar" onClick={() => del(j)} className="p-1 text-ink-muted hover:text-red-400"><Trash2 className="h-4 w-4" /></button>

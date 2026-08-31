@@ -1,6 +1,26 @@
 /** Capa de datos de búsquedas (search_jobs) y sus ejecuciones (job_runs). */
-import { db } from '@/lib/supabase';
+import { db, supabase } from '@/lib/supabase';
 import type { JobStatus } from '@/types/database';
+
+/**
+ * Ejecuta el pipeline completo para un job: collector → normalizer → scorer.
+ * Requiere las Edge Functions desplegadas (Fase 2). Devuelve el resumen.
+ */
+export async function runJobNow(jobId: string): Promise<{ encontrados: number; nuevos: number; calientes: number }> {
+  const collect = await supabase.functions.invoke('koda-collector', { body: { job_id: jobId } });
+  if (collect.error) throw new Error(collect.error.message);
+  const encontrados = (collect.data as { encontrados?: number })?.encontrados ?? 0;
+
+  const norm = await supabase.functions.invoke('koda-normalizer', { body: {} });
+  if (norm.error) throw new Error(norm.error.message);
+  const nuevos = (norm.data as { nuevos?: number })?.nuevos ?? 0;
+
+  const score = await supabase.functions.invoke('koda-scorer', { body: {} });
+  if (score.error) throw new Error(score.error.message);
+  const calientes = (score.data as { calientes?: number })?.calientes ?? 0;
+
+  return { encontrados, nuevos, calientes };
+}
 
 export interface SearchJob {
   id: string;

@@ -1,0 +1,14 @@
+{
+  "name": "KODA · Connexo",
+  "short_name": "KODA",
+  "description": "Motor de búsqueda de prospectos para Connexo",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#210900",
+  "theme_color": "#ff6600",
+  "icons": [
+    { "src": "/logo-bg.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/logo-bg.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/logo-bg.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

@@ -18,16 +18,32 @@ interface Parsed {
   google_place_id: string | null;
   nombre: string;
   categoria: string | null;
+  descripcion: string | null;
+  direccion: string | null;
   ciudad: string | null;
   lat: number | null;
   lng: number | null;
   website: string | null;
   instagram: string | null;
+  facebook: string | null;
   telefono: string | null;
+  whatsapp: string | null;
+  email: string | null;
   google_maps_url: string | null;
   rating: number | null;
   reviews_count: number | null;
   cerrado: boolean;
+}
+
+function pick(tags: Record<string, string>, keys: string[]): string | null {
+  for (const k of keys) if (tags[k]) return tags[k];
+  return null;
+}
+
+function fbHandle(v: string | null): string | null {
+  if (!v) return null;
+  const m = v.match(/facebook\.com\/([^/?#]+)/i);
+  return (m ? m[1] : v).replace(/^@/, '').trim() || null;
 }
 
 function parseOsm(payload: Record<string, unknown>, externalId: string): Parsed | null {
@@ -36,17 +52,40 @@ function parseOsm(payload: Record<string, unknown>, externalId: string): Parsed 
   if (!nombre) return null;
   const lat = (payload.lat as number) ?? (payload.center as { lat: number })?.lat ?? null;
   const lon = (payload.lon as number) ?? (payload.center as { lon: number })?.lon ?? null;
-  const categoria = tags.shop ?? tags.amenity ?? tags.craft ?? tags.office ?? null;
+  const categoria = tags.shop ?? tags.amenity ?? tags.craft ?? tags.office ?? tags.tourism ?? tags.leisure ?? null;
+
+  // Dirección: calle + número (+ barrio).
+  const dirPartes = [
+    [tags['addr:street'], tags['addr:housenumber']].filter(Boolean).join(' '),
+    tags['addr:suburb'] ?? tags['addr:neighbourhood'],
+  ].filter(Boolean);
+  const direccion = dirPartes.length ? dirPartes.join(', ') : null;
+
+  // Descripción útil: rubro legible + cocina/marca + horarios.
+  const descParts = [
+    tags.cuisine ? `Cocina: ${tags.cuisine.replace(/;/g, ', ')}` : null,
+    tags.brand ? `Marca: ${tags.brand}` : null,
+    tags.opening_hours ? `Horario: ${tags.opening_hours}` : null,
+  ].filter(Boolean);
+
+  const telefono = toE164EC(pick(tags, ['contact:phone', 'phone', 'contact:mobile', 'contact:telephone', 'mobile']));
+  const whatsapp = toE164EC(pick(tags, ['contact:whatsapp', 'whatsapp']));
+
   return {
     external_id: externalId,
     google_place_id: null,
     nombre: cleanName(nombre),
     categoria,
+    descripcion: descParts.length ? descParts.join(' · ') : null,
+    direccion,
     ciudad: tags['addr:city'] ?? null,
     lat, lng: lon,
-    website: cleanUrl(tags.website ?? tags['contact:website']),
-    instagram: instagramHandle(tags['contact:instagram']),
-    telefono: toE164EC(tags.phone ?? tags['contact:phone']),
+    website: cleanUrl(pick(tags, ['website', 'contact:website', 'url', 'contact:url'])),
+    instagram: instagramHandle(pick(tags, ['contact:instagram', 'instagram'])),
+    facebook: fbHandle(pick(tags, ['contact:facebook', 'facebook'])),
+    telefono,
+    whatsapp: whatsapp ?? telefono, // si no hay WA propio, el teléfono suele serlo en EC
+    email: pick(tags, ['contact:email', 'email']),
     google_maps_url: null,
     rating: null,
     reviews_count: null,
@@ -58,17 +97,30 @@ function parseGoogle(payload: Record<string, unknown>): Parsed | null {
   const nombre = (payload.displayName as { text: string })?.text ?? '';
   if (!nombre) return null;
   const loc = payload.location as { latitude: number; longitude: number } | undefined;
+  const addr = (payload.formattedAddress as string) ?? null;
+  // Intentar derivar ciudad del texto de dirección (penúltimo segmento).
+  let ciudad: string | null = null;
+  if (addr) {
+    const partes = addr.split(',').map((s) => s.trim());
+    if (partes.length >= 2) ciudad = partes[partes.length - 2].replace(/\d{5,}/g, '').trim() || null;
+  }
+  const tel = toE164EC((payload.internationalPhoneNumber ?? payload.nationalPhoneNumber) as string);
   return {
     external_id: `gplace:${payload.id}`,
     google_place_id: payload.id as string,
     nombre: cleanName(nombre),
     categoria: (payload.primaryType as string) ?? null,
-    ciudad: null, // se puede derivar de formattedAddress más adelante
+    descripcion: null,
+    direccion: addr,
+    ciudad,
     lat: loc?.latitude ?? null,
     lng: loc?.longitude ?? null,
     website: cleanUrl(payload.websiteUri as string),
     instagram: null,
-    telefono: toE164EC((payload.internationalPhoneNumber ?? payload.nationalPhoneNumber) as string),
+    facebook: null,
+    telefono: tel,
+    whatsapp: tel,
+    email: null,
     google_maps_url: (payload.googleMapsUri as string) ?? null,
     rating: (payload.rating as number) ?? null,
     reviews_count: (payload.userRatingCount as number) ?? null,
@@ -76,18 +128,24 @@ function parseGoogle(payload: Record<string, unknown>): Parsed | null {
   };
 }
 
+function isLinktree(url: string | null): boolean {
+  return Boolean(url && /linktr\.ee|beacons|bio\.link|linktree|campsite\.bio/i.test(url));
+}
+
 function deriveSignals(p: Parsed, ciudadJob: string | null): string[] {
   const ciudad = p.ciudad ?? ciudadJob;
   const s: string[] = [];
   if (!p.website) s.push('sin_web');
-  if (p.instagram) s.push('ig_o_fb_activo');
+  if (isLinktree(p.website)) s.push('usa_linktree');
+  if (p.instagram || p.facebook) s.push('ig_o_fb_activo');
+  if (p.whatsapp) s.push('whatsapp_publico');
   if ((p.reviews_count ?? 0) >= 10) s.push('resenas_10_plus');
   if ((p.rating ?? 0) >= 4.0) s.push('rating_4_plus');
   if (ciudad && CIUDADES_OBJETIVO.has(ciudad)) s.push('ciudad_objetivo');
   if (p.categoria && RUBROS_CON_PLANTILLA.has(p.categoria)) s.push('rubro_con_plantilla');
-  if (p.telefono) s.push('contacto_directo');
+  if (p.telefono || p.email || p.whatsapp) s.push('contacto_directo');
   if (p.cerrado) s.push('cerrado_permanente');
-  if (!p.telefono && !p.website && !p.instagram) s.push('sin_ningun_contacto');
+  if (!p.telefono && !p.email && !p.whatsapp && !p.website && !p.instagram && !p.facebook) s.push('sin_ningun_contacto');
   return s;
 }
 
@@ -106,15 +164,13 @@ Deno.serve(async (req) => {
     if (error) throw error;
     if (!raws || raws.length === 0) return json({ ok: true, procesados: 0, nuevos: 0, duplicados: 0 });
 
-    // Lista negra de supresión (5.7 / 4.4).
     const { data: bl } = await admin.from('deletion_requests').select('prospect_hash');
     const blacklist = new Set((bl ?? []).map((r) => r.prospect_hash));
 
-    // Ciudad por run (para señales ciudad_objetivo).
     const runIds = [...new Set(raws.map((r) => r.run_id))];
     const { data: runs } = await admin.from('job_runs').select('id, job_id').in('id', runIds);
     const jobIds = [...new Set((runs ?? []).map((r) => r.job_id))];
-    const { data: jobs } = await admin.from('search_jobs').select('id, ciudad, source_id').in('id', jobIds);
+    const { data: jobs } = await admin.from('search_jobs').select('id, ciudad').in('id', jobIds);
     const runToCiudad = new Map<string, string | null>();
     (runs ?? []).forEach((run) => {
       const job = (jobs ?? []).find((j) => j.id === run.job_id);
@@ -142,7 +198,6 @@ Deno.serve(async (req) => {
 
       if (blacklist.has(hash)) { await admin.from('raw_records').update({ procesado: true }).eq('id', raw.id); saltados++; continue; }
 
-      // Buscar existente por google_place_id o dedupe_hash.
       let existing: { id: string } | null = null;
       if (parsed.google_place_id) {
         const { data } = await admin.from('prospects').select('id').eq('google_place_id', parsed.google_place_id).maybeSingle();
@@ -156,20 +211,24 @@ Deno.serve(async (req) => {
       const base = {
         nombre: parsed.nombre,
         categoria: parsed.categoria,
+        descripcion: parsed.descripcion,
+        direccion: parsed.direccion,
         ciudad,
         lat: parsed.lat,
         lng: parsed.lng,
         website: parsed.website,
         tiene_website: Boolean(parsed.website),
+        usa_linktree: isLinktree(parsed.website),
         instagram: parsed.instagram,
-        whatsapp: parsed.telefono, // heurística: teléfono publicado sirve de WhatsApp
+        facebook: parsed.facebook,
+        whatsapp: parsed.whatsapp,
         google_place_id: parsed.google_place_id,
         google_maps_url: parsed.google_maps_url,
         rating: parsed.rating,
         reviews_count: parsed.reviews_count,
         source_id: raw.source_id,
         last_seen_at: new Date().toISOString(),
-        score_desglose: {}, // marca para re-scoring
+        score_desglose: {},
       };
 
       let prospectId: string;
@@ -188,7 +247,6 @@ Deno.serve(async (req) => {
         nuevos++; bump(raw.run_id, 'nuevos');
       }
 
-      // Señales (idempotente: reemplaza).
       const signals = deriveSignals(parsed, ciudadJob);
       await admin.from('prospect_signals').delete().eq('prospect_id', prospectId);
       if (signals.length) {
@@ -197,14 +255,15 @@ Deno.serve(async (req) => {
 
       // Contactos (idempotente: reemplaza).
       await admin.from('prospect_contacts').delete().eq('prospect_id', prospectId);
-      if (parsed.telefono) {
-        await admin.from('prospect_contacts').insert({ prospect_id: prospectId, tipo: 'telefono', valor: parsed.telefono, etiqueta: 'principal' });
-      }
+      const contactos: { prospect_id: string; tipo: string; valor: string; etiqueta?: string }[] = [];
+      if (parsed.telefono) contactos.push({ prospect_id: prospectId, tipo: 'telefono', valor: parsed.telefono, etiqueta: 'principal' });
+      if (parsed.whatsapp && parsed.whatsapp !== parsed.telefono) contactos.push({ prospect_id: prospectId, tipo: 'whatsapp', valor: parsed.whatsapp });
+      if (parsed.email) contactos.push({ prospect_id: prospectId, tipo: 'email', valor: parsed.email });
+      if (contactos.length) await admin.from('prospect_contacts').insert(contactos);
 
       await admin.from('raw_records').update({ procesado: true }).eq('id', raw.id);
     }
 
-    // Actualizar contadores por run.
     for (const [runId, c] of perRun) {
       const { data: cur } = await admin.from('job_runs').select('nuevos, duplicados').eq('id', runId).maybeSingle();
       await admin.from('job_runs').update({

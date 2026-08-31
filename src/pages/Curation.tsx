@@ -64,7 +64,7 @@ export default function Curation() {
     <div>
       <PageHeader
         title="Curaduría de creadores"
-        description="Alta manual de creadores de contenido. Nada de scraping de redes: KODA guarda solo lo que el analista escribe."
+        description="Carga manual de influencers y creadores de contenido como prospectos."
       />
 
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
@@ -121,10 +121,21 @@ export default function Curation() {
         </Card>
 
         <Card>
-          <h2 className="mb-2 font-heading text-lg text-ink-primary">Cómo funciona</h2>
+          <h2 className="mb-2 font-heading text-lg text-ink-primary">¿Qué es esto?</h2>
           <p className="text-sm text-ink-secondary">
-            Para creadores no automatizamos redes (viola sus términos). Un analista
-            pega el @usuario y KODA calcula su score con las mismas reglas.
+            Instagram y TikTok <strong>prohíben el scraping</strong>, así que KODA no
+            puede buscar creadores solos como hace con los negocios (OSM/Google).
+          </p>
+          <p className="mt-2 text-sm text-ink-secondary">
+            Esta pantalla es la vía <strong>manual y legal</strong>: cuando tu equipo
+            encuentra un influencer que podría ser cliente (un chef, una marca de ropa,
+            un fotógrafo), pega acá su <code>@usuario</code> y sus datos. KODA lo guarda
+            como un prospecto más —con su KODA Score— y aparece en la tabla de Prospectos
+            junto a los negocios.
+          </p>
+          <p className="mt-2 text-xs text-ink-muted">
+            En resumen: los <em>negocios</em> entran por búsqueda automática; los
+            <em> creadores de contenido</em> entran por acá, a mano.
           </p>
           {ultimo && (
             <div className="mt-4 rounded-md border border-emerald-500/30 bg-emerald-500/10 p-3">

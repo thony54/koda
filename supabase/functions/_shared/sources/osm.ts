@@ -55,7 +55,8 @@ export async function geocodeCity(
 
 const AMENITIES =
   'restaurant|cafe|bar|fast_food|pub|ice_cream|pharmacy|bank|fuel|clinic|' +
-  'dentist|veterinary|doctors|gym|fitness_centre|marketplace|driving_school';
+  'dentist|veterinary|doctors|gym|fitness_centre|marketplace|driving_school|' +
+  'cinema|nightclub|car_wash|car_rental|money_transfer|internet_cafe';
 
 /**
  * Busca negocios alrededor de un punto. Devuelve elementos crudos de Overpass.
@@ -78,6 +79,8 @@ export async function overpassSearch(opts: {
   node(around:${radio},${lat},${lng})[amenity~"${AMENITIES}"][name];
   node(around:${radio},${lat},${lng})[craft][name];
   node(around:${radio},${lat},${lng})[office][name];
+  node(around:${radio},${lat},${lng})[tourism~"hotel|guest_house|hostel|motel"][name];
+  node(around:${radio},${lat},${lng})[leisure~"fitness_centre|sports_centre|dance"][name];
 );
 out tags ${Math.min(max, 200)};`;
 

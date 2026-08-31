@@ -67,15 +67,19 @@ export async function overpassSearch(opts: {
   radio: number;
   max: number;
 }): Promise<RawPlace[]> {
-  const { lat, lng, radio, max } = opts;
-  const q = `[out:json][timeout:25];
+  const { lat, lng, max } = opts;
+  // Solo `node` (no nwr): las vías/relaciones hacen que la consulta se agote en
+  // radios grandes. Los nodes cubren la mayoría de los POI y son mucho más
+  // rápidos. Radio acotado para no reventar el timeout del servidor público.
+  const radio = Math.min(opts.radio || 8000, 12000);
+  const q = `[out:json][timeout:90];
 (
-  nwr(around:${radio},${lat},${lng})[shop][name];
-  nwr(around:${radio},${lat},${lng})[amenity~"${AMENITIES}"][name];
-  nwr(around:${radio},${lat},${lng})[office][name];
-  nwr(around:${radio},${lat},${lng})[craft][name];
+  node(around:${radio},${lat},${lng})[shop][name];
+  node(around:${radio},${lat},${lng})[amenity~"${AMENITIES}"][name];
+  node(around:${radio},${lat},${lng})[craft][name];
+  node(around:${radio},${lat},${lng})[office][name];
 );
-out center tags ${Math.min(max, 500)};`;
+out tags ${Math.min(max, 200)};`;
 
   const res = await fetch('https://overpass-api.de/api/interpreter', {
     method: 'POST',
@@ -83,7 +87,12 @@ out center tags ${Math.min(max, 500)};`;
     body: `data=${encodeURIComponent(q)}`,
   });
   if (!res.ok) throw new Error(`Overpass respondió ${res.status}`);
-  const data = (await res.json()) as { elements: OsmElement[] };
+  const data = (await res.json()) as { elements?: OsmElement[]; remark?: string };
+
+  // Overpass devuelve 200 con "remark" cuando la consulta se agota/errores.
+  if (data.remark && (!data.elements || data.elements.length === 0)) {
+    throw new Error(`Overpass: ${data.remark}`);
+  }
   return (data.elements ?? []).slice(0, max).map((el) => ({
     external_id: `osm:${el.type}/${el.id}`,
     payload: el as unknown as Record<string, unknown>,

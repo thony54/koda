@@ -1,0 +1,142 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ============================================================================
+   KODA — Tokens de diseño
+   Copiados literalmente de Connexo Clients (index.html · "Connexo Strict
+   Branding Palette"). No reinventar la paleta. Lo único propio de KODA son las
+   variables --score-* al final de :root (bandas del KODA Score, sección 10.1).
+   ============================================================================ */
+
+:root {
+  /* Marca Connexo (paleta estricta) */
+  --background-dark: #210900;
+  --primary-orange: #ff6600;
+  --dark-orange: #962700;
+  --peach: #ffa35d;
+  --brand-text: #ffefe5;
+  --pure-black: #000000;
+  --pure-white: #ffffff;
+
+  /* Texto semántico */
+  --text-primary: #ffefe5;
+  --text-secondary: rgba(255, 239, 229, 0.7);
+  --text-muted: rgba(255, 239, 229, 0.5);
+
+  /* Fondos funcionales */
+  --background-card: #2b1204;
+  --background-elevated: rgba(150, 39, 0, 0.15);
+  --card-border: rgba(150, 39, 0, 0.4);
+
+  /* Glass (usado por los componentes ui/) */
+  --border-glass: rgba(255, 239, 229, 0.08);
+  --primary-orange-glow: rgba(255, 102, 0, 0.35);
+
+  /* Tipografía */
+  --font-heading: 'Tomorrow', sans-serif;
+  --font-body: 'Space Grotesk', sans-serif;
+
+  /* Radios */
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 20px;
+  --radius-xl: 32px;
+
+  /* ── KODA Score bands (derivadas de la paleta Connexo) ──────────────── */
+  --score-hot: #ffa35d;  /* Caliente  — acento Connexo al 100% (peach) */
+  --score-good: #ff6600; /* Bueno     — marca principal (orange) */
+  --score-warm: #b3754d; /* Tibio     — marca al 40% de saturación */
+  --score-cold: #9c8f88; /* Frío      — gris derivado de ink.muted */
+}
+
+/* Tema claro (override) — Connexo lo soporta; KODA arranca en oscuro por
+   coherencia con los componentes glass, pero el modo claro queda disponible. */
+html[data-theme='light'] {
+  --background-dark: #ffefe5;
+  --background-card: #ffffff;
+  --background-elevated: #fff8f5;
+  --primary-orange: #ff6600;
+  --dark-orange: #962700;
+  --text-primary: #210900;
+  --text-secondary: #3d1400;
+  --text-muted: #962700;
+  --card-border: rgba(150, 39, 0, 0.2);
+  --border-glass: rgba(33, 9, 0, 0.08);
+  --score-cold: #b09a8c;
+}
+
+@layer base {
+  * {
+    box-sizing: border-box;
+  }
+
+  html,
+  body {
+    overflow-x: clip;
+  }
+
+  body {
+    background-color: var(--background-dark);
+    color: var(--text-primary);
+    font-family: var(--font-body);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  h1, h2, h3, h4 {
+    font-family: var(--font-heading);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.001ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.001ms !important;
+    }
+  }
+}
+
+@layer utilities {
+  /* Superficie de panel — versión de Connexo Clients */
+  .glass-panel {
+    background: var(--background-card);
+    border: 1px solid var(--card-border);
+    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.25);
+  }
+
+  .glass-button {
+    background: linear-gradient(135deg, var(--primary-orange), #f7931e);
+    box-shadow: 0 4px 15px var(--primary-orange-glow);
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .glass-button:hover {
+    box-shadow: 0 6px 20px rgba(255, 102, 0, 0.55);
+    transform: translateY(-2px);
+  }
+
+  .glass-input {
+    background: var(--background-elevated);
+    border: 1px solid var(--border-glass);
+    transition: all 0.2s ease-in-out;
+  }
+
+  .glass-input:focus {
+    border-color: var(--primary-orange);
+    box-shadow: 0 0 0 2px var(--primary-orange-glow);
+  }
+}
+
+/* Scrollbar premium (solo desktop) */
+@media (min-width: 769px) {
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-track { background: var(--background-dark); }
+  ::-webkit-scrollbar-thumb {
+    background: var(--background-elevated);
+    border-radius: 4px;
+  }
+  ::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+}

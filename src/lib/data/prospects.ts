@@ -4,20 +4,12 @@
  * la consulta. Lee/escribe con la ANON key + RLS (el usuario debe estar activo;
  * escribir exige rol staff).
  */
-import type { SupabaseClient } from '@supabase/supabase-js';
-import { supabase } from '@/lib/supabase';
+import { db } from '@/lib/supabase';
 import type { Prospect, ProspectStatus, ProspectType, DashboardStats } from '@/types/domain';
 import type { ProspectRow } from '@/types/database';
 import { bandForScore, type ScoreBand } from '@/components/prospects/ScoreBadge';
 import { slug } from '@/lib/format';
 import { rowToProspect, prospectToInsertRow } from './mappers';
-
-/**
- * Handle sin tipar para la capa de datos. Los `select` con joins embebidos no
- * se infieren bien contra el stub de tipos; aquí mapeamos las filas a dominio a
- * mano. Cuando generes los tipos reales (`npm run types`) puedes quitar el cast.
- */
-const db = supabase as unknown as SupabaseClient;
 
 const SELECT_LIST = '*, sources(nombre)';
 const SELECT_DETAIL =
@@ -228,4 +220,82 @@ export async function addProspects(newOnes: Prospect[]): Promise<number> {
 export async function getDedupeKeys(): Promise<Set<string>> {
   const { data } = await db.from('prospects').select('nombre, ciudad');
   return new Set((data ?? []).map((p) => `${slug(p.nombre)}|${slug(p.ciudad ?? '')}`));
+}
+
+export interface MapPoint {
+  id: string; nombre: string; ciudad: string | null; categoria: string | null;
+  lat: number; lng: number; score: number;
+}
+
+export async function getMapPoints(): Promise<MapPoint[]> {
+  const { data, error } = await db
+    .from('prospects')
+    .select('id, nombre, ciudad, categoria, lat, lng, score')
+    .not('lat', 'is', null)
+    .not('lng', 'is', null);
+  if (error) throw error;
+  return (data ?? []) as MapPoint[];
+}
+
+export async function deleteProspect(id: string): Promise<void> {
+  const { error } = await db.from('prospects').delete().eq('id', id);
+  if (error) throw error;
+}
+
+export interface DupCandidate {
+  id: string; nombre: string; ciudad: string | null; categoria: string | null;
+  score: number; status: string; source_nombre?: string; first_seen_at: string;
+  tiene_website: boolean; whatsapp: string | null;
+}
+export interface DupPair { a: DupCandidate; b: DupCandidate; motivo: string }
+
+/** Detecta pares de posibles duplicados (mismo nombre+ciudad, o nombre muy similar). */
+export async function findDuplicatePairs(): Promise<DupPair[]> {
+  const { data, error } = await db
+    .from('prospects')
+    .select('id, nombre, ciudad, categoria, score, status, source_id, first_seen_at, tiene_website, whatsapp, sources(nombre)');
+  if (error) throw error;
+  const rows: DupCandidate[] = (data ?? []).map((r: Record<string, unknown>) => ({
+    id: r.id as string, nombre: r.nombre as string, ciudad: (r.ciudad as string) ?? null,
+    categoria: (r.categoria as string) ?? null, score: (r.score as number) ?? 0, status: r.status as string,
+    source_nombre: (r.sources as { nombre: string } | null)?.nombre,
+    first_seen_at: r.first_seen_at as string, tiene_website: Boolean(r.tiene_website),
+    whatsapp: (r.whatsapp as string) ?? null,
+  }));
+
+  const pairs: DupPair[] = [];
+  // Agrupar por ciudad para comparar solo dentro de la misma ciudad.
+  const byCity = new Map<string, DupCandidate[]>();
+  rows.forEach((r) => {
+    const c = slug(r.ciudad ?? '');
+    if (!byCity.has(c)) byCity.set(c, []);
+    byCity.get(c)!.push(r);
+  });
+
+  for (const group of byCity.values()) {
+    for (let i = 0; i < group.length; i++) {
+      for (let j = i + 1; j < group.length; j++) {
+        const a = group[i], b = group[j];
+        const sa = slug(a.nombre), sb = slug(b.nombre);
+        if (sa === sb) pairs.push({ a, b, motivo: 'Mismo nombre y ciudad' });
+        else if (trigramSimilarity(sa, sb) >= 0.6) pairs.push({ a, b, motivo: 'Nombre muy similar' });
+      }
+    }
+  }
+  return pairs;
+}
+
+/** Similitud por trigramas (aprox. de pg_trgm) para la cola de duplicados. */
+function trigramSimilarity(a: string, b: string): number {
+  const tri = (s: string) => {
+    const p = `  ${s} `;
+    const set = new Set<string>();
+    for (let i = 0; i < p.length - 2; i++) set.add(p.slice(i, i + 3));
+    return set;
+  };
+  const ta = tri(a), tb = tri(b);
+  if (!ta.size || !tb.size) return 0;
+  let inter = 0;
+  ta.forEach((t) => { if (tb.has(t)) inter++; });
+  return inter / (ta.size + tb.size - inter);
 }

@@ -1,4 +1,4 @@
-import { createClient } from '@supabase/supabase-js';
+import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/types/database';
 
 const url = import.meta.env.VITE_SUPABASE_URL;
@@ -35,3 +35,10 @@ export const supabase = createClient<Database>(
     detectSessionInUrl: true,
   },
 });
+
+/**
+ * Handle sin tipar para la capa de datos. Los `select` con joins embebidos no se
+ * infieren bien contra el stub de tipos; mapeamos las filas a dominio a mano.
+ * Cuando generes los tipos reales (`npm run types`) puedes quitar el cast.
+ */
+export const db = supabase as unknown as SupabaseClient;

@@ -2,22 +2,37 @@
 import { db, supabase } from '@/lib/supabase';
 import type { JobStatus } from '@/types/database';
 
+/** Extrae el mensaje real de error del cuerpo de la respuesta de la función. */
+async function invokeFn<T>(name: string, body: Record<string, unknown>): Promise<T> {
+  const { data, error } = await supabase.functions.invoke(name, { body });
+  if (error) {
+    let msg = error.message;
+    // FunctionsHttpError expone la Response en .context; ahí está nuestro JSON.
+    const ctx = (error as { context?: Response }).context;
+    if (ctx && typeof ctx.json === 'function') {
+      try {
+        const b = await ctx.json();
+        if (b?.error) msg = `${name}: ${b.error}`;
+      } catch { /* cuerpo no-JSON */ }
+    }
+    throw new Error(msg);
+  }
+  return data as T;
+}
+
 /**
  * Ejecuta el pipeline completo para un job: collector → normalizer → scorer.
  * Requiere las Edge Functions desplegadas (Fase 2). Devuelve el resumen.
  */
 export async function runJobNow(jobId: string): Promise<{ encontrados: number; nuevos: number; calientes: number }> {
-  const collect = await supabase.functions.invoke('koda-collector', { body: { job_id: jobId } });
-  if (collect.error) throw new Error(collect.error.message);
-  const encontrados = (collect.data as { encontrados?: number })?.encontrados ?? 0;
+  const collect = await invokeFn<{ encontrados?: number }>('koda-collector', { job_id: jobId });
+  const encontrados = collect?.encontrados ?? 0;
 
-  const norm = await supabase.functions.invoke('koda-normalizer', { body: {} });
-  if (norm.error) throw new Error(norm.error.message);
-  const nuevos = (norm.data as { nuevos?: number })?.nuevos ?? 0;
+  const norm = await invokeFn<{ nuevos?: number }>('koda-normalizer', {});
+  const nuevos = norm?.nuevos ?? 0;
 
-  const score = await supabase.functions.invoke('koda-scorer', { body: {} });
-  if (score.error) throw new Error(score.error.message);
-  const calientes = (score.data as { calientes?: number })?.calientes ?? 0;
+  const score = await invokeFn<{ calientes?: number }>('koda-scorer', {});
+  const calientes = score?.calientes ?? 0;
 
   return { encontrados, nuevos, calientes };
 }

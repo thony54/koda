@@ -8,18 +8,49 @@ export interface RawPlace {
   payload: Record<string, unknown>;
 }
 
+// Gazetteer de ciudades objetivo con el CENTRO urbano real (no el centroide del
+// cantón). Evita depender de Nominatim, que suele bloquear IPs de datacenter
+// como las de las Edge Functions.
+const CITY_COORDS: Record<string, { lat: number; lng: number }> = {
+  ibarra: { lat: 0.3517, lng: -78.1223 },
+  otavalo: { lat: 0.2344, lng: -78.2611 },
+  quito: { lat: -0.1807, lng: -78.4678 },
+  guayaquil: { lat: -2.1709, lng: -79.9224 },
+  cuenca: { lat: -2.9006, lng: -79.0045 },
+  ambato: { lat: -1.2543, lng: -78.6229 },
+  'santo domingo': { lat: -0.2542, lng: -79.1719 },
+  manta: { lat: -0.9677, lng: -80.7089 },
+  loja: { lat: -3.9931, lng: -79.2042 },
+  riobamba: { lat: -1.6636, lng: -78.6546 },
+};
+
+function citySlug(s: string): string {
+  return s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
+}
+
+/**
+ * Resuelve coordenadas de una ciudad: primero el gazetteer local, luego
+ * Nominatim como respaldo (puede fallar desde la nube).
+ */
 export async function geocodeCity(
   ciudad: string,
   pais = 'Ecuador',
 ): Promise<{ lat: number; lng: number } | null> {
-  const url = `https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(
-    `${ciudad}, ${pais}`,
-  )}`;
-  const res = await fetch(url, { headers: { 'User-Agent': UA } });
-  if (!res.ok) return null;
-  const data = (await res.json()) as { lat: string; lon: string }[];
-  if (!data.length) return null;
-  return { lat: Number(data[0].lat), lng: Number(data[0].lon) };
+  const local = CITY_COORDS[citySlug(ciudad)];
+  if (local) return local;
+
+  try {
+    const url = `https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(
+      `${ciudad}, ${pais}`,
+    )}`;
+    const res = await fetch(url, { headers: { 'User-Agent': UA } });
+    if (!res.ok) return null;
+    const data = (await res.json()) as { lat: string; lon: string }[];
+    if (!data.length) return null;
+    return { lat: Number(data[0].lat), lng: Number(data[0].lon) };
+  } catch {
+    return null;
+  }
 }
 
 const AMENITIES =

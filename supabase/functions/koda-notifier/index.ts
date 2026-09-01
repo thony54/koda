@@ -7,28 +7,11 @@
 //   DISCORD_WEBHOOK_HOT | _NUEVOS | _REPORTES | _ERRORES  (y _DEFAULT de respaldo)
 import { corsHeaders, json } from '../_shared/cors.ts';
 import { getAdminClient, requireCaller } from '../_shared/supabaseAdmin.ts';
+import { postToDiscord, webhookFor } from '../_shared/discord.ts';
 
 const CANALES = ['hot', 'nuevos', 'reportes', 'errores'] as const;
 type Canal = (typeof CANALES)[number];
 const MAX_INTENTOS = 3;
-
-function webhookFor(canal: string): string | null {
-  const key = `DISCORD_WEBHOOK_${canal.toUpperCase()}`;
-  return Deno.env.get(key) ?? Deno.env.get('DISCORD_WEBHOOK_DEFAULT') ?? null;
-}
-
-async function postToDiscord(url: string, content: string): Promise<void> {
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    // 2000 chars es el tope de Discord.
-    body: JSON.stringify({ content: content.slice(0, 1900), allowed_mentions: { parse: [] } }),
-  });
-  if (!res.ok) {
-    const body = await res.text().catch(() => '');
-    throw new Error(`Discord ${res.status}: ${body.slice(0, 200)}`);
-  }
-}
 
 // deno-lint-ignore no-explicit-any
 function fmt(canal: string, payload: any, prospect: any): string {

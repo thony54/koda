@@ -4,6 +4,7 @@ import { corsHeaders, json } from '../_shared/cors.ts';
 import { getAdminClient, requireCaller } from '../_shared/supabaseAdmin.ts';
 import { geocodeCity, overpassSearch } from '../_shared/sources/osm.ts';
 import { googleTextSearch, GOOGLE_TEXTSEARCH_COST } from '../_shared/sources/googlePlaces.ts';
+import { tryPostToChannel } from '../_shared/discord.ts';
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
@@ -97,8 +98,16 @@ Deno.serve(async (req) => {
     if (runId) {
       await admin.from('job_runs').update({ status: 'error', finished_at: new Date().toISOString(), error_mensaje: msg }).eq('id', runId);
     }
-    // Encolar aviso a #koda-errores.
-    await admin.from('notifications').insert({ canal: 'errores', payload: { texto: `Collector falló: ${msg}` } });
+    // Aviso a #koda-errores: intento inmediato (no depende del cron del notifier)
+    // y, si el webhook responde, lo marco enviado; si no, queda pendiente en la cola.
+    const texto = `⚠️ Collector falló: ${msg}`;
+    const enviado = await tryPostToChannel('errores', texto);
+    await admin.from('notifications').insert({
+      canal: 'errores',
+      payload: { texto },
+      status: enviado ? 'enviado' : 'pendiente',
+      enviado_at: enviado ? new Date().toISOString() : null,
+    });
     return json({ error: msg }, 500);
   }
 });

@@ -40,21 +40,21 @@ select cron.schedule('koda-scorer', '2-59/10 * * * *', $$
   );
 $$);
 
--- (Fase 3) Notifier cada minuto — descomentar cuando exista koda-notifier.
--- select cron.schedule('koda-notifier', '* * * * *', $$
---   select net.http_post(
---     url := 'https://<PROJECT_REF>.supabase.co/functions/v1/koda-notifier',
---     headers := jsonb_build_object('Content-Type','application/json','Authorization','Bearer <SERVICE_ROLE_KEY>'),
---     body := '{}'::jsonb);
--- $$);
+-- (Fase 3) Notifier cada minuto — drena la cola de notifications a Discord.
+select cron.schedule('koda-notifier', '* * * * *', $$
+  select net.http_post(
+    url := 'https://<PROJECT_REF>.supabase.co/functions/v1/koda-notifier',
+    headers := jsonb_build_object('Content-Type','application/json','Authorization','Bearer <SERVICE_ROLE_KEY>'),
+    body := '{}'::jsonb);
+$$);
 
 -- (Fase 3) Digest diario 07:00 America/Guayaquil = 12:00 UTC.
--- select cron.schedule('koda-digest', '0 12 * * *', $$
---   select net.http_post(
---     url := 'https://<PROJECT_REF>.supabase.co/functions/v1/koda-digest',
---     headers := jsonb_build_object('Content-Type','application/json','Authorization','Bearer <SERVICE_ROLE_KEY>'),
---     body := '{}'::jsonb);
--- $$);
+select cron.schedule('koda-digest', '0 12 * * *', $$
+  select net.http_post(
+    url := 'https://<PROJECT_REF>.supabase.co/functions/v1/koda-digest',
+    headers := jsonb_build_object('Content-Type','application/json','Authorization','Bearer <SERVICE_ROLE_KEY>'),
+    body := '{}'::jsonb);
+$$);
 
 -- Para ver / borrar tareas:
 --   select * from cron.job;

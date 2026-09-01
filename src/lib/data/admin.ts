@@ -35,8 +35,11 @@ export async function updateScoringRule(id: string, patch: Partial<ScoringRule>)
 }
 
 export async function deleteScoringRule(id: string) {
-  const { error } = await db.from('scoring_rules').delete().eq('id', id);
+  const { data, error } = await db.from('scoring_rules').delete().eq('id', id).select('id');
   if (error) throw error;
+  if (!data || data.length === 0) {
+    throw new Error('No se eliminó la regla. Tu usuario debe tener rol super_admin o analista y estar activo (permisos RLS).');
+  }
 }
 
 /** Base para el simulador: cada prospecto con las claves de señales que disparó. */
@@ -89,8 +92,11 @@ export async function upsertSource(s: Partial<Source>) {
 }
 
 export async function deleteSource(id: string) {
-  const { error } = await db.from('sources').delete().eq('id', id);
+  const { data, error } = await db.from('sources').delete().eq('id', id).select('id');
   if (error) throw error;
+  if (!data || data.length === 0) {
+    throw new Error('No se eliminó la fuente. Tu usuario debe tener rol super_admin o analista y estar activo (permisos RLS).');
+  }
 }
 
 // ── Usuarios (profiles) ─────────────────────────────────────────────────────

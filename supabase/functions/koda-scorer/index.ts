@@ -18,6 +18,10 @@ Deno.serve(async (req) => {
       .select('clave, descripcion, puntos, activa');
     if (rErr) throw rErr;
 
+    // Umbral "caliente" configurable desde el panel (app_config). Fallback 75.
+    const { data: cfg } = await admin.from('app_config').select('valor').eq('clave', 'hot_threshold').maybeSingle();
+    const HOT = Number(cfg?.valor ?? 75) || 75;
+
     // Prospectos a calificar: los recién normalizados (desglose vacío) o todos.
     let q = admin.from('prospects').select('id, score').limit(300);
     if (!all) q = q.filter('score_desglose', 'eq', '{}');
@@ -39,8 +43,8 @@ Deno.serve(async (req) => {
       const { score, desglose, plan } = computeScore(signals, (rules ?? []) as Rule[]);
       await admin.from('prospects').update({ score, score_desglose: desglose, plan_sugerido: plan }).eq('id', p.id);
 
-      const eraCaliente = (p.score ?? 0) >= 75;
-      if (score >= 75 && !eraCaliente) {
+      const eraCaliente = (p.score ?? 0) >= HOT;
+      if (score >= HOT && !eraCaliente) {
         calientes++;
         await admin.from('notifications').insert({ prospect_id: p.id, canal: 'hot', payload: { score, plan } });
       }

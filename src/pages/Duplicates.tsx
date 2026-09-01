@@ -21,11 +21,15 @@ export default function Duplicates() {
   );
 
   async function merge(keep: DupCandidate, drop: DupCandidate, p: DupPair) {
-    await deleteProspect(drop.id);
-    setDismissed((s) => new Set(s).add(pairKey(p)));
-    qc.invalidateQueries({ queryKey: ['prospects'] });
-    qc.invalidateQueries({ queryKey: ['dashboard'] });
-    toast(`Fusionados: se conservó "${keep.nombre}" y se eliminó el duplicado`, 'success');
+    try {
+      await deleteProspect(drop.id);
+      setDismissed((s) => new Set(s).add(pairKey(p)));
+      qc.invalidateQueries({ queryKey: ['prospects'] });
+      qc.invalidateQueries({ queryKey: ['dashboard'] });
+      toast(`Fusionados: se conservó "${keep.nombre}" y se eliminó el duplicado`, 'success');
+    } catch (e) {
+      toast(e instanceof Error ? e.message : 'No se pudo eliminar el duplicado', 'error');
+    }
   }
 
   return (

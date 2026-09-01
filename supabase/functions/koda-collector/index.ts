@@ -69,7 +69,7 @@ Deno.serve(async (req) => {
     } else {
       // OSM Overpass (gratis). Necesita coordenadas.
       if (lat == null || lng == null) throw new Error('No se pudo geocodificar la ciudad para OSM.');
-      places = await overpassSearch({ lat, lng, radio: job.radio_metros ?? 15000, max });
+      places = await overpassSearch({ lat, lng, radio: job.radio_metros ?? 15000, max, categorias: job.categorias ?? undefined });
     }
 
     // Guardar el crudo sin transformar (nunca perder el crudo).

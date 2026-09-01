@@ -30,8 +30,13 @@ export default function Sources() {
   }
 
   async function del(s: Source) {
-    await remove.mutateAsync(s.id);
-    toast(`Fuente "${s.nombre}" eliminada`, 'warning');
+    if (!confirm(`¿Eliminar la fuente "${s.nombre}"?`)) return;
+    try {
+      await remove.mutateAsync(s.id);
+      toast(`Fuente "${s.nombre}" eliminada`, 'warning');
+    } catch (e) {
+      toast(e instanceof Error ? e.message : 'No se pudo eliminar la fuente', 'error');
+    }
   }
 
   return (

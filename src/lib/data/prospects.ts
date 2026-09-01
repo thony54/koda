@@ -238,8 +238,12 @@ export async function getMapPoints(): Promise<MapPoint[]> {
 }
 
 export async function deleteProspect(id: string): Promise<void> {
-  const { error } = await db.from('prospects').delete().eq('id', id);
+  const { data, error } = await db.from('prospects').delete().eq('id', id).select('id');
   if (error) throw error;
+  // Con RLS, un DELETE sin permiso afecta 0 filas y NO lanza error. Lo detectamos.
+  if (!data || data.length === 0) {
+    throw new Error('No se eliminó el prospecto. Tu usuario debe tener rol super_admin o analista y estar activo (permisos RLS).');
+  }
 }
 
 export interface DupCandidate {

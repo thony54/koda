@@ -61,8 +61,13 @@ export default function Scoring() {
   }
 
   async function removeRule(rule: ScoringRule) {
-    await remove.mutateAsync(rule.id);
-    toast(`Regla "${rule.clave}" eliminada`, 'warning');
+    if (!confirm(`¿Eliminar la regla "${rule.clave}"?`)) return;
+    try {
+      await remove.mutateAsync(rule.id);
+      toast(`Regla "${rule.clave}" eliminada`, 'warning');
+    } catch (e) {
+      toast(e instanceof Error ? e.message : 'No se pudo eliminar la regla', 'error');
+    }
   }
 
   return (

@@ -53,13 +53,28 @@ export async function geocodeCity(
   }
 }
 
-const AMENITIES =
-  'restaurant|cafe|bar|fast_food|pub|ice_cream|pharmacy|bank|fuel|clinic|' +
-  'dentist|veterinary|doctors|gym|fitness_centre|marketplace|driving_school|' +
-  'cinema|nightclub|car_wash|car_rental|money_transfer|internet_cafe';
+// ── Rubros (categorías) → filtros de tags de OSM ────────────────────────────
+// Cada rubro que el usuario elige en la búsqueda se traduce a uno o varios
+// filtros de OSM. Así "restaurantes" trae SOLO restaurantes y no todo el mapa.
+// La clave (p. ej. 'restaurantes') es la que se guarda en search_jobs.categorias.
+export const RUBRO_TAGS: Record<string, string[]> = {
+  restaurantes: ['amenity~"restaurant|fast_food"'],
+  cafe_bar: ['amenity~"cafe|bar|pub|ice_cream|nightclub"'],
+  belleza: ['shop~"hairdresser|beauty"', 'craft~"hairdresser"'],
+  salud: ['amenity~"pharmacy|clinic|dentist|doctors|veterinary"'],
+  gimnasios: ['leisure~"fitness_centre|sports_centre|dance"'],
+  hoteles: ['tourism~"hotel|guest_house|hostel|motel"'],
+  tiendas: ['shop'],
+  talleres: ['craft', 'amenity~"car_wash|car_rental|driving_school|internet_cafe"'],
+  oficinas: ['office'],
+};
+
+// Conjunto por defecto cuando el job no especifica rubros: todo lo anterior.
+const DEFAULT_FILTERS = Object.values(RUBRO_TAGS).flat();
 
 /**
  * Busca negocios alrededor de un punto. Devuelve elementos crudos de Overpass.
+ * @param categorias rubros elegidos (claves de RUBRO_TAGS). Vacío = todos.
  * @param max límite de resultados.
  */
 export async function overpassSearch(opts: {
@@ -67,20 +82,24 @@ export async function overpassSearch(opts: {
   lng: number;
   radio: number;
   max: number;
+  categorias?: string[];
 }): Promise<RawPlace[]> {
   const { lat, lng, max } = opts;
   // Solo `node` (no nwr): las vías/relaciones hacen que la consulta se agote en
   // radios grandes. Los nodes cubren la mayoría de los POI y son mucho más
   // rápidos. Radio acotado para no reventar el timeout del servidor público.
   const radio = Math.min(opts.radio || 8000, 12000);
+
+  // Filtros según los rubros elegidos; si no hay ninguno, se buscan todos.
+  const chosen = (opts.categorias ?? []).flatMap((r) => RUBRO_TAGS[r] ?? []);
+  const filters = chosen.length ? chosen : DEFAULT_FILTERS;
+  const nodeLines = filters
+    .map((f) => `  node(around:${radio},${lat},${lng})[${f}][name];`)
+    .join('\n');
+
   const q = `[out:json][timeout:90];
 (
-  node(around:${radio},${lat},${lng})[shop][name];
-  node(around:${radio},${lat},${lng})[amenity~"${AMENITIES}"][name];
-  node(around:${radio},${lat},${lng})[craft][name];
-  node(around:${radio},${lat},${lng})[office][name];
-  node(around:${radio},${lat},${lng})[tourism~"hotel|guest_house|hostel|motel"][name];
-  node(around:${radio},${lat},${lng})[leisure~"fitness_centre|sports_centre|dance"][name];
+${nodeLines}
 );
 out tags ${Math.min(max, 200)};`;
 

@@ -21,7 +21,7 @@ async function invokeFn<T>(name: string, body: Record<string, unknown>): Promise
 }
 
 /**
- * Ejecuta el pipeline completo para un job: collector → normalizer → scorer.
+ * Ejecuta el pipeline completo para un job: collector → normalizer → scorer → notifier.
  * Requiere las Edge Functions desplegadas (Fase 2). Devuelve el resumen.
  */
 export async function runJobNow(jobId: string): Promise<{ encontrados: number; nuevos: number; calientes: number }> {
@@ -33,6 +33,15 @@ export async function runJobNow(jobId: string): Promise<{ encontrados: number; n
 
   const score = await invokeFn<{ calientes?: number }>('koda-scorer', {});
   const calientes = score?.calientes ?? 0;
+
+  // Vacía la cola de notificaciones (nuevos + calientes) para que lleguen a
+  // Discord al momento, sin depender del cron del notifier. Best-effort: un
+  // fallo aquí no debe tumbar el resumen de la búsqueda.
+  try {
+    await invokeFn('koda-notifier', {});
+  } catch {
+    // La cola queda pendiente; el cron o "enviar cola" la drenará luego.
+  }
 
   return { encontrados, nuevos, calientes };
 }

@@ -245,6 +245,9 @@ Deno.serve(async (req) => {
         if (insErr) { console.error('insert prospect', insErr.message); continue; }
         prospectId = ins.id;
         nuevos++; bump(raw.run_id, 'nuevos');
+        // Encola aviso a #koda-nuevos. El notifier lo formatea leyendo el prospecto
+        // (que para entonces ya habrá pasado por el scorer y tendrá score/plan).
+        await admin.from('notifications').insert({ prospect_id: prospectId, canal: 'nuevos', payload: {} });
       }
 
       const signals = deriveSignals(parsed, ciudadJob);

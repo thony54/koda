@@ -25,6 +25,16 @@ function fmt(canal: string, payload: any, prospect: any): string {
     ].filter(Boolean);
     return partes.join('\n');
   }
+  if (canal === 'nuevos' && prospect) {
+    const partes = [
+      `🆕 **Nuevo prospecto** — ${prospect.nombre}`,
+      prospect.ciudad ? `📍 ${prospect.ciudad}` : null,
+      `⭐ Score ${prospect.score ?? '—'}`,
+      prospect.whatsapp ? `💬 WhatsApp: ${prospect.whatsapp}` : null,
+      prospect.website ? `🌐 ${prospect.website}` : '🚫 Sin web',
+    ].filter(Boolean);
+    return partes.join('\n');
+  }
   if (payload?.texto) return String(payload.texto);
   return `📣 ${canal}: ${JSON.stringify(payload ?? {})}`;
 }

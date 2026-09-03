@@ -103,13 +103,7 @@ ${nodeLines}
 );
 out tags ${Math.min(max, 200)};`;
 
-  const res = await fetch('https://overpass-api.de/api/interpreter', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'User-Agent': UA },
-    body: `data=${encodeURIComponent(q)}`,
-  });
-  if (!res.ok) throw new Error(`Overpass respondió ${res.status}`);
-  const data = (await res.json()) as { elements?: OsmElement[]; remark?: string };
+  const data = await overpassFetch(q);
 
   // Overpass devuelve 200 con "remark" cuando la consulta se agota/errores.
   if (data.remark && (!data.elements || data.elements.length === 0)) {
@@ -119,6 +113,52 @@ out tags ${Math.min(max, 200)};`;
     external_id: `osm:${el.type}/${el.id}`,
     payload: el as unknown as Record<string, unknown>,
   }));
+}
+
+// Mirrors públicos de Overpass. El principal (overpass-api.de) es el más saturado
+// y suele devolver 429 desde IPs de datacenter; probamos alternativas en orden.
+const OVERPASS_ENDPOINTS = [
+  'https://overpass-api.de/api/interpreter',
+  'https://overpass.kumi.systems/api/interpreter',
+  'https://maps.mail.ru/osm/tools/overpass/api/interpreter',
+];
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/**
+ * Ejecuta una consulta Overpass con tolerancia a rate-limit: ante 429/504
+ * espera (respetando Retry-After si viene) y reintenta; si un endpoint sigue
+ * fallando, pasa al siguiente mirror. Lanza solo si todos se agotan.
+ */
+async function overpassFetch(q: string): Promise<{ elements?: OsmElement[]; remark?: string }> {
+  let ultimoError = 'Overpass no respondió';
+  for (const url of OVERPASS_ENDPOINTS) {
+    for (let intento = 0; intento < 2; intento++) {
+      let res: Response;
+      try {
+        res = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'User-Agent': UA },
+          body: `data=${encodeURIComponent(q)}`,
+        });
+      } catch (e) {
+        ultimoError = `Overpass ${url}: ${e instanceof Error ? e.message : String(e)}`;
+        break; // problema de red con este mirror: pasa al siguiente
+      }
+      if (res.ok) return (await res.json()) as { elements?: OsmElement[]; remark?: string };
+
+      ultimoError = `Overpass respondió ${res.status}`;
+      // 429 (rate limit) o 504 (gateway/timeout): esperar y reintentar el mismo mirror.
+      if (res.status === 429 || res.status === 504) {
+        const ra = Number(res.headers.get('retry-after'));
+        const espera = Number.isFinite(ra) && ra > 0 ? Math.min(ra, 10) : 2 * (intento + 1);
+        await sleep(espera * 1000);
+        continue;
+      }
+      break; // otros errores: no insistir con este mirror
+    }
+  }
+  throw new Error(ultimoError);
 }
 
 interface OsmElement {

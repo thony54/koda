@@ -46,7 +46,7 @@ export default function JobRuns() {
                 <TD className="text-xs text-ink-secondary">{formatDateTime(r.started_at)}</TD>
                 <TD><Badge variant={statusVariant[r.status] ?? 'default'}>{r.status}</Badge></TD>
                 <TD className="text-right text-ink-secondary">{r.encontrados}</TD>
-                <TD className="text-right text-emerald-400">{r.nuevos}</TD>
+                <TD className="text-right text-success">{r.nuevos}</TD>
                 <TD className="text-right text-ink-muted">{r.duplicados}</TD>
                 <TD className="text-ink-secondary">{duration(r.started_at, r.finished_at)}</TD>
                 <TD className="text-right text-ink-secondary">{formatUSD(r.costo_estimado)}</TD>

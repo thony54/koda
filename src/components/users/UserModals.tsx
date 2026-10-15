@@ -107,7 +107,7 @@ export function CreateUserModal({ open, onClose }: { open: boolean; onClose: () 
         footer={<Button onClick={onClose}>Listo</Button>}
       >
         <div className="space-y-3">
-          <p className="flex items-center gap-2 text-sm text-emerald-400">
+          <p className="flex items-center gap-2 text-sm text-success">
             <Check className="h-4 w-4" /> {created.email} ya puede entrar a KODA.
           </p>
           <p className="text-sm text-ink-secondary">

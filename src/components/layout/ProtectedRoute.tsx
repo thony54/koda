@@ -12,7 +12,7 @@ export function ProtectedRoute({ children }: { children: React.ReactNode }) {
 
   if (loading) {
     return (
-      <div className="min-h-screen grid place-items-center bg-surface-base text-ink-muted">
+      <div className="grid min-h-screen place-items-center text-ink-muted">
         <Spinner className="h-6 w-6" />
       </div>
     );
@@ -28,9 +28,10 @@ export function ProtectedRoute({ children }: { children: React.ReactNode }) {
 
   // Sesión válida pero perfil inactivo o inexistente: sin acceso.
   return (
-    <div className="min-h-screen grid place-items-center bg-surface-base px-4">
-      <div className="glass-panel max-w-md rounded-lg p-8 text-center space-y-3">
-        <h1 className="font-heading text-xl text-ink-primary">Cuenta sin acceso</h1>
+    <div className="grid min-h-screen place-items-center px-4">
+      <div className="glass-panel panel-ember max-w-md space-y-3 rounded-lg p-8 text-center">
+        <img src="/logo.png" alt="" className="mx-auto h-14 w-14 object-contain opacity-80 grayscale" draggable={false} />
+        <h1 className="font-heading text-xl font-semibold text-ink-primary">Cuenta sin acceso</h1>
         <p className="text-sm text-ink-secondary">
           {profile
             ? 'Tu cuenta está desactivada. Pide a un Super Admin que la habilite.'
@@ -47,7 +48,7 @@ function SignOutLink() {
   return (
     <button
       onClick={() => void signOut()}
-      className="text-sm text-[var(--primary-orange)] hover:underline"
+      className="text-sm text-accent-text hover:underline"
     >
       Cerrar sesión
     </button>

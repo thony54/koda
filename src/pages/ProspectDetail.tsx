@@ -30,7 +30,7 @@ export default function ProspectDetail() {
   if (!p) {
     return (
       <div>
-        <Link to="/prospectos" className="mb-3 inline-flex items-center gap-1.5 text-sm text-ink-secondary hover:text-ink-primary">
+        <Link to="/prospectos" className="mb-4 inline-flex items-center gap-1.5 text-[13px] text-ink-secondary transition-colors hover:text-ink-primary">
           <ArrowLeft className="h-4 w-4" /> Prospectos
         </Link>
         <Card><p className="text-ink-secondary">No se encontró el prospecto.</p></Card>
@@ -57,15 +57,16 @@ export default function ProspectDetail() {
 
   return (
     <div>
-      <Link to="/prospectos" className="mb-3 inline-flex items-center gap-1.5 text-sm text-ink-secondary hover:text-ink-primary">
+      <Link to="/prospectos" className="mb-4 inline-flex items-center gap-1.5 text-[13px] text-ink-secondary transition-colors hover:text-ink-primary">
         <ArrowLeft className="h-4 w-4" /> Prospectos
       </Link>
 
       {/* Encabezado */}
-      <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 className="font-heading text-2xl font-semibold text-ink-primary">{p.nombre}</h1>
-          <p className="mt-1 flex flex-wrap items-center gap-2 text-sm text-ink-secondary">
+      <div className="mb-7 flex flex-wrap items-start justify-between gap-4">
+        <div className="min-w-0">
+          <p className="eyebrow mb-2 text-accent-text/80">Ficha de prospecto</p>
+          <h1 className="font-heading text-[26px] font-semibold leading-tight text-ink-primary sm:text-[30px]">{p.nombre}</h1>
+          <p className="mt-1.5 flex flex-wrap items-center gap-2 text-sm text-ink-secondary">
             <span className="capitalize">{p.categoria}</span>
             <span className="text-ink-muted">·</span>
             <span>{TIPO_LABEL[p.tipo]}</span>
@@ -84,13 +85,13 @@ export default function ProspectDetail() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
         {/* Columna principal */}
         <div className="lg:col-span-2 space-y-5">
-          <Card>
+          <Card ember>
             <ScoreBreakdown score={p.score} lines={p.score_desglose} />
           </Card>
 
           {/* Presencia y actividad */}
           <Card>
-            <h2 className="mb-3 font-heading text-lg text-ink-primary">Presencia digital</h2>
+            <h2 className="mb-3 card-title">Presencia digital</h2>
             <div className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-3">
               <Stat label="Sitio web" value={p.tiene_website ? 'Sí' : 'No'} accent={!p.tiene_website} />
               <Stat label="Linktree" value={p.usa_linktree ? 'Sí' : 'No'} accent={p.usa_linktree} />
@@ -108,11 +109,11 @@ export default function ProspectDetail() {
 
           {/* Notas */}
           <Card>
-            <h2 className="mb-3 font-heading text-lg text-ink-primary">Notas</h2>
+            <h2 className="mb-3 card-title">Notas</h2>
             {p.notas?.length ? (
               <ul className="space-y-3">
                 {p.notas.map((n) => (
-                  <li key={n.id} className="rounded-md border border-line bg-surface-elevated p-3">
+                  <li key={n.id} className="rounded-md border border-line bg-surface-inset/60 p-3.5">
                     <p className="text-sm text-ink-primary">{n.texto}</p>
                     <p className="mt-1 text-xs text-ink-muted">{n.autor} · {timeAgo(n.created_at)}</p>
                   </li>
@@ -128,7 +129,7 @@ export default function ProspectDetail() {
         <div className="space-y-5">
           {/* Acciones */}
           <Card>
-            <h2 className="mb-3 font-heading text-lg text-ink-primary">Acciones</h2>
+            <h2 className="mb-3 card-title">Acciones</h2>
             <div className="space-y-3">
               <Select
                 label="Estado"
@@ -158,14 +159,14 @@ export default function ProspectDetail() {
                 </Button>
               </div>
               {p.verified_at && (
-                <p className="text-xs text-emerald-400">Verificado · {formatDateTime(p.verified_at)}</p>
+                <p className="text-xs text-success">Verificado · {formatDateTime(p.verified_at)}</p>
               )}
             </div>
           </Card>
 
           {/* Contacto */}
           <Card>
-            <h2 className="mb-3 font-heading text-lg text-ink-primary">Contacto</h2>
+            <h2 className="mb-3 card-title">Contacto</h2>
             {p.contactos?.length ? (
               <ul className="space-y-2">
                 {p.contactos.map((c) => (
@@ -175,7 +176,7 @@ export default function ProspectDetail() {
                       {c.tipo === 'email' ? c.valor : formatPhoneEC(c.valor)}
                     </span>
                     {c.etiqueta && <Badge size="sm">{c.etiqueta}</Badge>}
-                    {c.verificado && <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" />}
+                    {c.verificado && <CheckCircle2 className="h-3.5 w-3.5 text-success" />}
                   </li>
                 ))}
               </ul>
@@ -186,7 +187,7 @@ export default function ProspectDetail() {
 
           {/* Señales */}
           <Card>
-            <h2 className="mb-3 font-heading text-lg text-ink-primary">Señales</h2>
+            <h2 className="mb-3 card-title">Señales</h2>
             <div className="flex flex-wrap gap-1.5">
               {p.signals?.length ? p.signals.map((s) => (
                 <Badge key={s.id} variant={s.peso >= 0 ? 'default' : 'error'} size="sm">
@@ -198,13 +199,13 @@ export default function ProspectDetail() {
 
           {/* Timeline */}
           <Card>
-            <h2 className="mb-3 font-heading text-lg text-ink-primary">Actividad</h2>
-            <ol className="space-y-3 border-l border-line pl-4">
+            <h2 className="mb-3 card-title">Actividad</h2>
+            <ol className="space-y-4 border-l border-line-strong pl-5">
               {p.actividades?.map((a) => (
                 <li key={a.id} className="relative">
-                  <span className="absolute -left-[21px] top-1 h-2 w-2 rounded-full bg-[var(--primary-orange)]" />
+                  <span className="absolute -left-[25px] top-1.5 h-2 w-2 rounded-full bg-accent shadow-[0_0_8px_rgb(var(--c-accent)/0.8)]" />
                   <p className="text-sm text-ink-primary">{a.detalle}</p>
-                  <p className="text-xs text-ink-muted">{a.autor} · {formatDateTime(a.created_at)}</p>
+                  <p className="num mt-0.5 text-[11px] text-ink-muted">{a.autor} · {formatDateTime(a.created_at)}</p>
                 </li>
               ))}
             </ol>
@@ -213,7 +214,7 @@ export default function ProspectDetail() {
       </div>
 
       {/* Nota trazabilidad */}
-      <p className="mt-4 text-xs text-ink-muted">
+      <p className="num mt-6 text-[11px] text-ink-muted">
         Visto por primera vez {timeAgo(p.first_seen_at)} · última vez {timeAgo(p.last_seen_at)}.
         {p.assigned_to ? '' : ' Sin asignar a Connexo Sellers.'}
       </p>
@@ -223,9 +224,9 @@ export default function ProspectDetail() {
 
 function Stat({ label, value, accent }: { label: string; value: string; accent?: boolean }) {
   return (
-    <div>
-      <p className="text-xs text-ink-muted">{label}</p>
-      <p className={`font-medium ${accent ? 'text-[var(--primary-orange)]' : 'text-ink-primary'}`}>{value}</p>
+    <div className="rounded-md border border-line bg-surface-inset/60 px-3 py-2.5">
+      <p className="eyebrow !text-[10px]">{label}</p>
+      <p className={`mt-1 truncate font-medium ${accent ? 'text-accent-text' : 'text-ink-primary'}`}>{value}</p>
     </div>
   );
 }
@@ -236,7 +237,7 @@ function LinkPill({ icon, href, label }: { icon: React.ReactNode; href: string; 
       href={href}
       target="_blank"
       rel="noreferrer"
-      className="inline-flex items-center gap-1.5 rounded-md border border-line px-2.5 py-1 text-xs text-ink-secondary hover:text-ink-primary hover:border-[var(--primary-orange)]/40"
+      className="inline-flex items-center gap-1.5 rounded-md border border-line-strong bg-surface-inset px-2.5 py-1.5 text-xs text-ink-secondary transition-colors hover:border-accent/45 hover:text-ink-primary"
     >
       {icon}{label}<ExternalLink className="h-3 w-3 opacity-60" />
     </a>

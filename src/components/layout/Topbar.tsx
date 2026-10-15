@@ -1,59 +1,55 @@
-import { Menu, Moon, Sun, LogOut } from 'lucide-react';
-import { useAuth } from '@/hooks/useAuth';
+import { Menu, Moon, Sun } from 'lucide-react';
+import { useLocation } from 'react-router-dom';
 import { useUIStore } from '@/store/uiStore';
 import { ScopeSwitcher } from './ScopeSwitcher';
+import { navGroups } from './nav';
 
-const roleLabel: Record<string, string> = {
-  super_admin: 'Super Admin',
-  analista: 'Analista',
-  lector: 'Lector',
-};
+/** Etiqueta de la sección actual a partir del menú (la ruta más específica gana). */
+function useSectionLabel(): string {
+  const { pathname } = useLocation();
+  const items = navGroups.flatMap((g) => g.items);
+  const match = items
+    .filter((it) => (it.end ? pathname === it.to : pathname === it.to || pathname.startsWith(`${it.to}/`)))
+    .sort((a, b) => b.to.length - a.to.length)[0];
+  return match?.label ?? '';
+}
 
 export function Topbar() {
-  const { profile, signOut } = useAuth();
   const toggleSidebar = useUIStore((s) => s.toggleSidebar);
   const theme = useUIStore((s) => s.theme);
   const toggleTheme = useUIStore((s) => s.toggleTheme);
+  const section = useSectionLabel();
 
   return (
-    <header className="sticky top-0 z-20 flex h-14 items-center gap-3 border-b border-line bg-surface-base/80 backdrop-blur px-4">
+    <header className="sticky top-0 z-20 flex h-14 items-center gap-3 border-b border-line bg-surface-void/70 px-4 backdrop-blur-md sm:px-6 lg:px-8">
       <button
         onClick={toggleSidebar}
-        className="lg:hidden p-1.5 rounded-md text-ink-secondary hover:text-ink-primary hover:bg-white/5"
+        className="-ml-1 rounded-md p-1.5 text-ink-secondary hover:bg-veil/[0.06] hover:text-ink-primary lg:hidden"
         aria-label="Abrir menú"
       >
         <Menu className="h-5 w-5" />
       </button>
 
-      <div className="ml-auto flex items-center gap-2">
+      {/* Ruta de migas: KODA / Sección */}
+      <div className="eyebrow flex min-w-0 items-center gap-2 !text-[11px]">
+        <span className="hidden sm:inline">KODA</span>
+        {section && (
+          <>
+            <span className="hidden text-accent-text/70 sm:inline">/</span>
+            <span className="truncate text-ink-primary">{section}</span>
+          </>
+        )}
+      </div>
+
+      <div className="ml-auto flex shrink-0 items-center gap-1.5 sm:gap-2">
         <ScopeSwitcher />
         <button
           onClick={toggleTheme}
-          className="p-2 rounded-md text-ink-secondary hover:text-ink-primary hover:bg-white/5"
+          className="rounded-md p-2 text-ink-secondary transition-colors hover:bg-veil/[0.06] hover:text-ink-primary"
           aria-label="Cambiar tema"
           title={theme === 'dark' ? 'Modo claro' : 'Modo oscuro'}
         >
           {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-        </button>
-
-        <div className="hidden sm:flex flex-col items-end leading-tight mr-1">
-          <span className="text-sm font-medium text-ink-primary">
-            {profile?.nombre || profile?.email || 'Usuario'}
-          </span>
-          {profile?.rol && (
-            <span className="text-[11px] text-ink-muted">
-              {roleLabel[profile.rol] ?? profile.rol}
-            </span>
-          )}
-        </div>
-
-        <button
-          onClick={() => void signOut()}
-          className="p-2 rounded-md text-ink-secondary hover:text-red-400 hover:bg-white/5"
-          aria-label="Cerrar sesión"
-          title="Cerrar sesión"
-        >
-          <LogOut className="h-4 w-4" />
         </button>
       </div>
     </header>

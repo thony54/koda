@@ -115,10 +115,10 @@ export default function UsersAdmin() {
                   <TD>
                     <div className="flex items-center gap-2">
                       <span title={st?.tiene_google ? 'Tiene su API key de Google Places' : 'Sin API key de Google'}>
-                        <KeyRound className={`h-4 w-4 ${st?.tiene_google ? 'text-emerald-400' : 'text-ink-muted/40'}`} />
+                        <KeyRound className={`h-4 w-4 ${st?.tiene_google ? 'text-success' : 'text-veil/25'}`} />
                       </span>
                       <span title={st?.tiene_discord ? 'Tiene webhooks de Discord' : 'Sin webhooks de Discord'}>
-                        <MessageSquare className={`h-4 w-4 ${st?.tiene_discord ? 'text-emerald-400' : 'text-ink-muted/40'}`} />
+                        <MessageSquare className={`h-4 w-4 ${st?.tiene_discord ? 'text-success' : 'text-veil/25'}`} />
                       </span>
                     </div>
                   </TD>
@@ -132,7 +132,7 @@ export default function UsersAdmin() {
                       <button
                         onClick={() => viewAs(u)}
                         title={isSelf ? 'Ver mis prospectos' : 'Ver los prospectos de este usuario'}
-                        className="p-1 text-ink-muted hover:text-[var(--primary-orange)]"
+                        className="p-1 text-ink-muted hover:text-accent-text"
                       >
                         <Eye className="h-4 w-4" />
                       </button>

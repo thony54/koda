@@ -71,14 +71,14 @@ export function Filters({ value, onChange }: FiltersProps) {
     (value.search ? 1 : 0);
 
   return (
-    <div className="mb-4 flex flex-wrap items-center gap-2">
-      <div className="relative min-w-[220px] flex-1 max-w-xs">
+    <div className="mb-5 flex flex-wrap items-center gap-2">
+      <div className="relative min-w-[220px] max-w-xs flex-1">
         <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-muted" />
         <input
           value={value.search ?? ''}
           onChange={(e) => set('search', e.target.value || undefined)}
           placeholder="Buscar por nombre o rubro…"
-          className="glass-input w-full rounded-md py-1.5 pl-9 pr-3 text-sm text-ink-primary placeholder:text-ink-muted outline-none"
+          className="glass-input h-9 w-full rounded-md pl-9 pr-3 text-[13px] text-ink-primary placeholder:text-ink-muted outline-none"
         />
       </div>
 
@@ -92,7 +92,7 @@ export function Filters({ value, onChange }: FiltersProps) {
       {activeCount > 0 && (
         <button
           onClick={() => onChange({})}
-          className="flex items-center gap-1 rounded-md px-2 py-1.5 text-sm text-ink-muted hover:text-ink-primary"
+          className="flex h-9 items-center gap-1.5 rounded-md px-2.5 text-[13px] text-ink-muted transition-colors hover:bg-veil/[0.06] hover:text-ink-primary"
         >
           <X className="h-3.5 w-3.5" /> Limpiar ({activeCount})
         </button>

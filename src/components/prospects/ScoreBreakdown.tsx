@@ -1,72 +1,91 @@
 import type { ScoreLine } from '@/types/domain';
-import { bandForScore } from './ScoreBadge';
+import { bandForScore, type ScoreBand } from './ScoreBadge';
 import { SCORE_VAR, BAND_META } from '@/lib/scoring';
 
+/** Zonas del medidor: cada una se llena con el color de su propia banda. */
+const ZONES: { band: ScoreBand; from: number }[] = [
+  { band: 'cold', from: 0 },
+  { band: 'warm', from: 25 },
+  { band: 'good', from: 50 },
+  { band: 'hot', from: 75 },
+];
+
 /**
- * Desglose del KODA Score como barra segmentada (sección 10.2): explica el
- * puntaje de un vistazo. Nunca mostramos el número sin el porqué (sección 6.1).
+ * Desglose del KODA Score (sección 10.2): medidor de 4 zonas + cada regla con
+ * su aporte. Nunca mostramos el número sin el porqué (sección 6.1).
  */
 export function ScoreBreakdown({ score, lines }: { score: number; lines: ScoreLine[] }) {
   const band = bandForScore(score);
   const color = SCORE_VAR[band];
   const positivos = lines.filter((l) => l.puntos > 0);
   const negativos = lines.filter((l) => l.puntos < 0);
-  const totalPos = positivos.reduce((a, l) => a + l.puntos, 0) || 1;
+  const maxPts = Math.max(1, ...lines.map((l) => Math.abs(l.puntos)));
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-end justify-between">
+    <div className="space-y-6">
+      <div className="flex items-end justify-between gap-4">
         <div>
-          <p className="text-sm text-ink-secondary">KODA Score</p>
-          <p className="font-heading text-4xl font-bold" style={{ color }}>
+          <p className="eyebrow">KODA Score</p>
+          <p className="num mt-1 text-[44px] font-semibold leading-none" style={{ color }}>
             {score}
-            <span className="text-lg text-ink-muted"> / 100</span>
+            <span className="ml-1.5 text-base font-normal text-ink-muted">/ 100</span>
           </p>
         </div>
         <div className="text-right">
-          <p className="text-lg font-semibold" style={{ color }}>
+          <p className="text-base font-semibold" style={{ color }}>
             {BAND_META[band].emoji} {BAND_META[band].label}
           </p>
-          <p className="text-xs text-ink-muted">{BAND_META[band].accion}</p>
+          <p className="mt-0.5 text-xs text-ink-muted">{BAND_META[band].accion}</p>
         </div>
       </div>
 
-      {/* Barra segmentada */}
-      <div className="flex h-3 w-full overflow-hidden rounded-full bg-surface-elevated">
-        {positivos.map((l) => (
-          <div
-            key={l.clave}
-            title={`${l.descripcion} (+${l.puntos})`}
-            style={{
-              width: `${(l.puntos / totalPos) * 100}%`,
-              backgroundColor: color,
-              opacity: 0.55 + (l.puntos / 20) * 0.45,
-            }}
-            className="border-r border-surface-base/40 first:rounded-l-full last:rounded-r-full"
-          />
-        ))}
+      {/* Medidor de 4 zonas */}
+      <div>
+        <div className="flex h-2 gap-[3px]">
+          {ZONES.map((z) => {
+            const fill = Math.max(0, Math.min(1, (score - z.from) / 25));
+            return (
+              <div key={z.band} className="relative flex-1 overflow-hidden rounded-full bg-veil/[0.07]">
+                <div
+                  className="h-full rounded-full"
+                  style={{
+                    width: `${fill * 100}%`,
+                    backgroundColor: SCORE_VAR[z.band],
+                    boxShadow: fill > 0 ? `0 0 10px ${SCORE_VAR[z.band]}` : undefined,
+                  }}
+                />
+              </div>
+            );
+          })}
+        </div>
+        <div className="num mt-2 flex justify-between text-[10px] text-ink-muted">
+          {['0', '25', '50', '75', '100'].map((t) => (
+            <span key={t}>{t}</span>
+          ))}
+        </div>
       </div>
 
-      {/* Detalle línea por línea */}
-      <ul className="space-y-1.5 text-sm">
-        {positivos.map((l) => (
-          <li key={l.clave} className="flex items-center justify-between">
-            <span className="flex items-center gap-2 text-ink-secondary">
-              <span className="h-2 w-2 rounded-full" style={{ backgroundColor: color }} />
-              {l.descripcion}
-            </span>
-            <span className="font-medium text-emerald-400">+{l.puntos}</span>
-          </li>
-        ))}
-        {negativos.map((l) => (
-          <li key={l.clave} className="flex items-center justify-between">
-            <span className="flex items-center gap-2 text-ink-secondary">
-              <span className="h-2 w-2 rounded-full bg-red-500" />
-              {l.descripcion}
-            </span>
-            <span className="font-medium text-red-400">{l.puntos}</span>
-          </li>
-        ))}
+      {/* Aporte de cada regla */}
+      <ul className="space-y-3.5 text-sm">
+        {[...positivos, ...negativos].map((l) => {
+          const pos = l.puntos > 0;
+          return (
+            <li key={l.clave}>
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-ink-secondary">{l.descripcion}</span>
+                <span className={`num font-medium ${pos ? 'text-success' : 'text-danger'}`}>
+                  {pos ? `+${l.puntos}` : l.puntos}
+                </span>
+              </div>
+              <div className="mt-1.5 h-[3px] overflow-hidden rounded-full bg-veil/[0.06]">
+                <div
+                  className={`h-full rounded-full ${pos ? 'bg-success/70' : 'bg-danger/70'}`}
+                  style={{ width: `${(Math.abs(l.puntos) / maxPts) * 100}%` }}
+                />
+              </div>
+            </li>
+          );
+        })}
         {lines.length === 0 && (
           <li className="text-ink-muted">Sin señales evaluadas todavía.</li>
         )}

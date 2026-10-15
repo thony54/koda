@@ -17,7 +17,7 @@ export default function Privacy() {
       {/* Principios */}
       <div className="mb-5 grid grid-cols-1 gap-4 sm:grid-cols-3">
         <Card>
-          <Ban className="mb-2 h-5 w-5 text-[var(--primary-orange)]" />
+          <Ban className="mb-2 h-5 w-5 text-accent-text" />
           <h3 className="font-heading text-ink-primary">Derecho de supresión</h3>
           <p className="mt-1 text-sm text-ink-secondary">
             "Eliminar y bloquear" borra el prospecto y guarda su hash para que ningún
@@ -25,7 +25,7 @@ export default function Privacy() {
           </p>
         </Card>
         <Card>
-          <Clock className="mb-2 h-5 w-5 text-[var(--primary-orange)]" />
+          <Clock className="mb-2 h-5 w-5 text-accent-text" />
           <h3 className="font-heading text-ink-primary">Retención</h3>
           <p className="mt-1 text-sm text-ink-secondary">
             Los prospectos <code>descartado</code> se eliminan a los 12 meses (job
@@ -33,7 +33,7 @@ export default function Privacy() {
           </p>
         </Card>
         <Card>
-          <FileDown className="mb-2 h-5 w-5 text-[var(--primary-orange)]" />
+          <FileDown className="mb-2 h-5 w-5 text-accent-text" />
           <h3 className="font-heading text-ink-primary">Trazabilidad</h3>
           <p className="mt-1 text-sm text-ink-secondary">
             Cada prospecto guarda su fuente y URL de origen. Si alguien pregunta de
@@ -44,7 +44,7 @@ export default function Privacy() {
 
       <Card padding="none">
         <div className="border-b border-line px-5 py-3">
-          <h2 className="flex items-center gap-2 font-heading text-lg text-ink-primary">
+          <h2 className="flex items-center gap-2 card-title">
             <ShieldCheck className="h-4 w-4" /> Lista de supresión
           </h2>
         </div>

@@ -1,12 +1,9 @@
 import React from 'react';
 
 /**
- * Primitivas de tabla con el estilo denso de KODA (sección 10.2):
- * filas de 44px, zebra sutil, encabezado fijo. La tabla es la protagonista,
- * así que estas primitivas priorizan densidad sobre aire.
- *
- * La ProspectTable con orden/filtros de servidor (TanStack Table) se arma en
- * la Fase 1 sobre estas primitivas.
+ * Primitivas de tabla con el estilo denso de KODA: la tabla es la protagonista.
+ * Encabezado en monoespaciada (etiqueta), separadores hairline, sin zebra —
+ * el hover y la selección dan la jerarquía.
  */
 
 export const Table: React.FC<React.TableHTMLAttributes<HTMLTableElement>> = ({
@@ -14,7 +11,7 @@ export const Table: React.FC<React.TableHTMLAttributes<HTMLTableElement>> = ({
   children,
   ...props
 }) => (
-  <div className="w-full overflow-x-auto rounded-lg border border-line">
+  <div className="glass-panel w-full overflow-x-auto rounded-lg">
     <table className={`w-full border-collapse text-sm ${className}`} {...props}>
       {children}
     </table>
@@ -27,7 +24,7 @@ export const THead: React.FC<React.HTMLAttributes<HTMLTableSectionElement>> = ({
   ...props
 }) => (
   <thead
-    className={`bg-surface-elevated text-ink-secondary sticky top-0 z-10 ${className}`}
+    className={`sticky top-0 z-10 border-b border-line bg-surface-elevated/60 ${className}`}
     {...props}
   >
     {children}
@@ -50,7 +47,7 @@ export const TR: React.FC<React.HTMLAttributes<HTMLTableRowElement>> = ({
   ...props
 }) => (
   <tr
-    className={`h-11 border-b border-line odd:bg-transparent even:bg-white/[0.02] hover:bg-[var(--primary-orange)]/5 transition-colors ${className}`}
+    className={`h-12 border-b border-line transition-colors last:border-b-0 hover:bg-veil/[0.04] ${className}`}
     {...props}
   >
     {children}
@@ -63,7 +60,7 @@ export const TH: React.FC<React.ThHTMLAttributes<HTMLTableCellElement>> = ({
   ...props
 }) => (
   <th
-    className={`px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide whitespace-nowrap ${className}`}
+    className={`eyebrow whitespace-nowrap px-4 py-3 text-left font-medium ${className}`}
     {...props}
   >
     {children}
@@ -75,7 +72,7 @@ export const TD: React.FC<React.TdHTMLAttributes<HTMLTableCellElement>> = ({
   children,
   ...props
 }) => (
-  <td className={`px-3 py-2 text-ink-primary align-middle ${className}`} {...props}>
+  <td className={`px-4 py-2 align-middle text-ink-primary ${className}`} {...props}>
     {children}
   </td>
 );

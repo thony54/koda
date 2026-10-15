@@ -3,72 +3,125 @@
 @tailwind utilities;
 
 /* ============================================================================
-   KODA — Tokens de diseño
-   Copiados literalmente de Connexo Clients (index.html · "Connexo Strict
-   Branding Palette"). No reinventar la paleta. Lo único propio de KODA son las
-   variables --score-* al final de :root (bandas del KODA Score, sección 10.1).
+   KODA — Sistema de diseño "Obsidiana + Brasa"
+
+   Superficies casi negras con tinte cálido; el naranja de Connexo (#ff6600) es
+   el único acento y se usa con mesura. Hairlines de 1px en lugar de sombras
+   pesadas, etiquetas en monoespaciada, números tabulares. Movimiento mínimo:
+   solo transiciones de estado, nada decorativo.
+
+   Superficies y acentos viven como canales RGB (--c-*) para que Tailwind pueda
+   aplicar opacidad (bg-accent/10). Los tokens heredados de Connexo (--primary-
+   orange, --background-card…) se conservan al final como alias.
    ============================================================================ */
 
-:root {
-  /* Marca Connexo (paleta estricta) */
-  --background-dark: #210900;
-  --primary-orange: #ff6600;
-  --dark-orange: #962700;
-  --peach: #ffa35d;
-  --brand-text: #ffefe5;
-  --pure-black: #000000;
-  --pure-white: #ffffff;
+:root,
+html[data-theme='dark'] {
+  color-scheme: dark;
 
-  /* Texto semántico */
-  --text-primary: #ffefe5;
-  --text-secondary: rgba(255, 239, 229, 0.7);
-  --text-muted: rgba(255, 239, 229, 0.5);
+  /* Superficies (canales RGB) */
+  --c-void: 7 6 5;          /* fondo de página */
+  --c-base: 11 9 8;         /* sidebar / topbar */
+  --c-raised: 18 15 13;     /* paneles */
+  --c-elevated: 27 23 20;   /* hover, cabeceras, chips */
+  --c-inset: 9 7 6;         /* campos de entrada */
+  --c-veil: 255 239 229;    /* velo de interacción (hover) */
 
-  /* Fondos funcionales */
-  --background-card: #2b1204;
-  --background-elevated: rgba(150, 39, 0, 0.15);
-  --card-border: rgba(150, 39, 0, 0.4);
+  /* Acento — naranja Connexo */
+  --c-accent: 255 102 0;
+  --c-accent-text: 255 128 38;
+  --c-peach: 255 163 93;
+  --c-on-accent: 26 9 0;
 
-  /* Glass (usado por los componentes ui/) */
-  --border-glass: rgba(255, 239, 229, 0.08);
-  --primary-orange-glow: rgba(255, 102, 0, 0.35);
+  /* Semánticos */
+  --c-success: 52 211 153;
+  --c-warning: 251 191 36;
+  --c-danger: 248 113 113;
+  --c-info: 96 165 250;
+
+  /* Texto */
+  --c-ink: 245 236 229;
+  --text-primary: rgb(var(--c-ink));
+  --text-secondary: rgb(var(--c-ink) / 0.72);
+  --text-muted: rgb(var(--c-ink) / 0.52);
+
+  /* Líneas */
+  --line: rgb(var(--c-ink) / 0.08);
+  --line-strong: rgb(var(--c-ink) / 0.15);
+
+  /* Atmósfera de fondo */
+  --glow-a: 0.1;
+  --glow-b: 0.04;
+  --grid-a: 0.035;
+
+  /* Sombras */
+  --shadow-panel: inset 0 1px 0 rgb(255 255 255 / 0.035), 0 14px 32px -18px rgb(0 0 0 / 0.7);
+  --shadow-pop: 0 0 0 1px var(--line-strong), 0 28px 70px -14px rgb(0 0 0 / 0.8);
+
+  /* KODA Score — derivadas de la paleta Connexo */
+  --score-hot: #ffa35d;
+  --score-good: #ff6600;
+  --score-warm: #b3754d;
+  --score-cold: #9c8f88;
 
   /* Tipografía */
-  --font-heading: 'Tomorrow', sans-serif;
-  --font-body: 'Space Grotesk', sans-serif;
+  --font-heading: 'Tomorrow', system-ui, sans-serif;
+  --font-body: 'Space Grotesk', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
 
   /* Radios */
-  --radius-sm: 8px;
-  --radius-md: 12px;
-  --radius-lg: 20px;
-  --radius-xl: 32px;
-
-  /* ── KODA Score bands (derivadas de la paleta Connexo) ──────────────── */
-  --score-hot: #ffa35d;  /* Caliente  — acento Connexo al 100% (peach) */
-  --score-good: #ff6600; /* Bueno     — marca principal (orange) */
-  --score-warm: #b3754d; /* Tibio     — marca al 40% de saturación */
-  --score-cold: #9c8f88; /* Frío      — gris derivado de ink.muted */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-xl: 20px;
 }
 
-/* Tema claro (override) — Connexo lo soporta; KODA arranca en oscuro por
-   coherencia con los componentes glass, pero el modo claro queda disponible. */
+/* Tema claro — papel cálido, mismo acento (texto de acento más profundo para contraste) */
 html[data-theme='light'] {
-  --background-dark: #ffefe5;
-  --background-card: #ffffff;
-  --background-elevated: #fff8f5;
-  --primary-orange: #ff6600;
-  --dark-orange: #962700;
-  --text-primary: #210900;
-  --text-secondary: #3d1400;
-  --text-muted: #962700;
-  --card-border: rgba(150, 39, 0, 0.2);
-  --border-glass: rgba(33, 9, 0, 0.08);
-  --score-cold: #b09a8c;
+  color-scheme: light;
+
+  --c-void: 244 240 236;
+  --c-base: 250 247 244;
+  --c-raised: 255 255 255;
+  --c-elevated: 245 241 237;
+  --c-inset: 250 247 244;
+  --c-veil: 26 17 11;
+
+  --c-accent: 255 102 0;
+  --c-accent-text: 184 67 0;
+  --c-peach: 217 119 40;
+  --c-on-accent: 26 9 0;
+
+  --c-success: 5 150 105;
+  --c-warning: 180 83 9;
+  --c-danger: 220 38 38;
+  --c-info: 37 99 235;
+
+  --c-ink: 26 17 11;
+  --text-secondary: rgb(var(--c-ink) / 0.74);
+  --text-muted: rgb(var(--c-ink) / 0.56);
+
+  --line: rgb(var(--c-ink) / 0.1);
+  --line-strong: rgb(var(--c-ink) / 0.18);
+
+  --glow-a: 0.07;
+  --glow-b: 0.03;
+  --grid-a: 0.05;
+
+  --shadow-panel: 0 1px 2px rgb(26 17 11 / 0.05), 0 12px 28px -18px rgb(26 17 11 / 0.18);
+  --shadow-pop: 0 0 0 1px var(--line-strong), 0 28px 60px -14px rgb(26 17 11 / 0.3);
+
+  --score-hot: #d96a00;
+  --score-good: #e65c00;
+  --score-warm: #a0623a;
+  --score-cold: #8a7d75;
 }
 
 @layer base {
   * {
     box-sizing: border-box;
+    scrollbar-width: thin;
+    scrollbar-color: var(--line-strong) transparent;
   }
 
   html,
@@ -77,15 +130,102 @@ html[data-theme='light'] {
   }
 
   body {
-    background-color: var(--background-dark);
+    background-color: rgb(var(--c-void));
     color: var(--text-primary);
     font-family: var(--font-body);
+    font-size: 14px;
+    line-height: 1.5;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+
+  /* Atmósfera: resplandor de brasa + retícula que se desvanece. Estático. */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    z-index: -2;
+    pointer-events: none;
+    background:
+      radial-gradient(1100px 560px at 6% -10%, rgb(var(--c-accent) / var(--glow-a)), transparent 62%),
+      radial-gradient(800px 480px at 100% 0%, rgb(var(--c-accent) / var(--glow-b)), transparent 60%);
+  }
+  body::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    background-image:
+      linear-gradient(to right, rgb(var(--c-veil) / var(--grid-a)) 1px, transparent 1px),
+      linear-gradient(to bottom, rgb(var(--c-veil) / var(--grid-a)) 1px, transparent 1px);
+    background-size: 56px 56px;
+    -webkit-mask-image: radial-gradient(ellipse 75% 55% at 40% 0%, #000 0%, transparent 78%);
+    mask-image: radial-gradient(ellipse 75% 55% at 40% 0%, #000 0%, transparent 78%);
   }
 
   h1, h2, h3, h4 {
     font-family: var(--font-heading);
+    letter-spacing: -0.01em;
+  }
+
+  ::selection {
+    background: rgb(var(--c-accent) / 0.35);
+    color: var(--text-primary);
+  }
+
+  :focus-visible {
+    outline: 2px solid rgb(var(--c-accent) / 0.7);
+    outline-offset: 2px;
+  }
+
+  code {
+    font-family: var(--font-mono);
+    font-size: 0.85em;
+    padding: 0.1em 0.4em;
+    border-radius: var(--radius-sm);
+    background: rgb(var(--c-veil) / 0.07);
+    color: rgb(var(--c-accent-text));
+  }
+
+  /* Casillas: caja afilada con relleno de acento */
+  input[type='checkbox'] {
+    appearance: none;
+    -webkit-appearance: none;
+    display: inline-grid;
+    place-content: center;
+    flex-shrink: 0;
+    width: 16px;
+    height: 16px;
+    margin: 0;
+    border-radius: 5px;
+    border: 1px solid var(--line-strong);
+    background: rgb(var(--c-inset));
+    cursor: pointer;
+    vertical-align: middle;
+    transition: background-color 0.15s, border-color 0.15s, box-shadow 0.15s;
+  }
+  input[type='checkbox']:hover {
+    border-color: rgb(var(--c-accent) / 0.65);
+  }
+  input[type='checkbox']:checked,
+  input[type='checkbox']:indeterminate {
+    background: rgb(var(--c-accent));
+    border-color: rgb(var(--c-accent));
+    box-shadow: 0 0 10px -2px rgb(var(--c-accent) / 0.6);
+  }
+  input[type='checkbox']:checked::after {
+    content: '';
+    width: 8px;
+    height: 4px;
+    margin-top: -2px;
+    border-left: 2px solid rgb(var(--c-on-accent));
+    border-bottom: 2px solid rgb(var(--c-on-accent));
+    transform: rotate(-45deg);
+  }
+  input[type='radio'] {
+    accent-color: rgb(var(--c-accent));
   }
 
   @media (prefers-reduced-motion: reduce) {
@@ -99,44 +239,185 @@ html[data-theme='light'] {
   }
 }
 
-@layer utilities {
-  /* Superficie de panel — versión de Connexo Clients */
+@layer components {
+  /* ── Superficies ─────────────────────────────────────────────────────── */
+
+  /* Panel: degradado vertical sutil + hairline + brillo superior */
   .glass-panel {
-    background: var(--background-card);
-    border: 1px solid var(--card-border);
-    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.25);
+    background: linear-gradient(180deg, rgb(var(--c-raised)) 0%, rgb(var(--c-raised) / 0.9) 100%);
+    border: 1px solid var(--line);
+    box-shadow: var(--shadow-panel);
   }
 
+  /* Panel destacado: línea de brasa en el borde superior */
+  .panel-ember {
+    position: relative;
+  }
+  .panel-ember::before {
+    content: '';
+    position: absolute;
+    top: -1px;
+    left: 12%;
+    right: 12%;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgb(var(--c-accent) / 0.85), transparent);
+    pointer-events: none;
+  }
+
+  /* ── Botón primario ──────────────────────────────────────────────────── */
   .glass-button {
-    background: linear-gradient(135deg, var(--primary-orange), #f7931e);
-    box-shadow: 0 4px 15px var(--primary-orange-glow);
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    background: linear-gradient(180deg, rgb(255 134 54) 0%, rgb(var(--c-accent)) 100%);
+    color: rgb(var(--c-on-accent));
+    box-shadow:
+      0 0 0 1px rgb(var(--c-accent) / 0.55),
+      inset 0 1px 0 rgb(255 255 255 / 0.3),
+      0 8px 20px -10px rgb(var(--c-accent) / 0.7);
+    transition: filter 0.15s ease, box-shadow 0.15s ease;
+  }
+  .glass-button:hover:not(:disabled) {
+    filter: brightness(1.08);
+    box-shadow:
+      0 0 0 1px rgb(var(--c-accent) / 0.7),
+      inset 0 1px 0 rgb(255 255 255 / 0.35),
+      0 10px 26px -10px rgb(var(--c-accent) / 0.85);
   }
 
-  .glass-button:hover {
-    box-shadow: 0 6px 20px rgba(255, 102, 0, 0.55);
-    transform: translateY(-2px);
-  }
-
+  /* ── Campos ──────────────────────────────────────────────────────────── */
   .glass-input {
-    background: var(--background-elevated);
-    border: 1px solid var(--border-glass);
-    transition: all 0.2s ease-in-out;
+    background: rgb(var(--c-inset));
+    border: 1px solid var(--line-strong);
+    color: var(--text-primary);
+    transition: border-color 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease;
+  }
+  .glass-input:hover:not(:focus):not(:disabled) {
+    border-color: rgb(var(--c-ink) / 0.26);
+  }
+  .glass-input:focus {
+    border-color: rgb(var(--c-accent) / 0.7);
+    box-shadow: 0 0 0 3px rgb(var(--c-accent) / 0.16);
+  }
+  .glass-input:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+  }
+  select.glass-input {
+    padding-right: 2.25rem;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23918a85' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 0.85rem center;
+  }
+  select.glass-input option {
+    background: rgb(var(--c-raised));
+    color: var(--text-primary);
   }
 
-  .glass-input:focus {
-    border-color: var(--primary-orange);
-    box-shadow: 0 0 0 2px var(--primary-orange-glow);
+  /* ── Tipografía de instrumento ───────────────────────────────────────── */
+
+  /* Etiqueta pequeña en monoespaciada, mayúsculas */
+  .eyebrow {
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    font-weight: 500;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+  }
+
+  /* Números: monoespaciada, tabulares */
+  .num {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.02em;
+  }
+
+  .card-title {
+    font-family: var(--font-body);
+    font-size: 15px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    color: var(--text-primary);
+  }
+
+  /* ── Navegación lateral ──────────────────────────────────────────────── */
+  .nav-link {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    height: 36px;
+    padding: 0 12px;
+    border-radius: var(--radius-md);
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    transition: background-color 0.15s ease, color 0.15s ease;
+  }
+  .nav-link svg {
+    flex-shrink: 0;
+    color: var(--text-muted);
+    transition: color 0.15s ease;
+  }
+  .nav-link:hover {
+    color: var(--text-primary);
+    background: rgb(var(--c-veil) / 0.05);
+  }
+  .nav-link:hover svg {
+    color: var(--text-secondary);
+  }
+  .nav-link[aria-current='page'] {
+    color: var(--text-primary);
+    background: linear-gradient(90deg, rgb(var(--c-accent) / 0.15), rgb(var(--c-accent) / 0.02));
+  }
+  .nav-link[aria-current='page'] svg {
+    color: rgb(var(--c-accent-text));
+  }
+  .nav-link[aria-current='page']::before {
+    content: '';
+    position: absolute;
+    left: -8px;
+    top: 8px;
+    bottom: 8px;
+    width: 3px;
+    border-radius: 0 3px 3px 0;
+    background: rgb(var(--c-accent));
+    box-shadow: 0 0 12px rgb(var(--c-accent) / 0.85);
   }
 }
 
-/* Scrollbar premium (solo desktop) */
-@media (min-width: 769px) {
-  ::-webkit-scrollbar { width: 8px; height: 8px; }
-  ::-webkit-scrollbar-track { background: var(--background-dark); }
-  ::-webkit-scrollbar-thumb {
-    background: var(--background-elevated);
-    border-radius: 4px;
+@layer utilities {
+  /* Fila de datos con hairline inferior */
+  .divide-hair > * + * {
+    border-top: 1px solid var(--line);
   }
-  ::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+}
+
+/* ── Alias heredados de Connexo (no usar en código nuevo) ─────────────────── */
+:root {
+  --background-dark: rgb(var(--c-void));
+  --background-card: rgb(var(--c-raised));
+  --background-elevated: rgb(var(--c-elevated));
+  --card-border: var(--line);
+  --border-glass: var(--line);
+  --primary-orange: rgb(var(--c-accent));
+  --primary-orange-glow: rgb(var(--c-accent) / 0.35);
+  --dark-orange: #962700;
+  --peach: rgb(var(--c-peach));
+  --brand-text: rgb(var(--c-ink));
+}
+
+/* Scrollbar WebKit */
+@media (min-width: 769px) {
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb {
+    background: var(--line-strong);
+    border-radius: 999px;
+    border: 3px solid transparent;
+    background-clip: padding-box;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--text-muted);
+    background-clip: padding-box;
+    border: 3px solid transparent;
+  }
 }

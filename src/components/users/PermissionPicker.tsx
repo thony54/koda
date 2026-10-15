@@ -32,7 +32,7 @@ export function PermissionPicker({ value, onChange, disabled }: PermissionPicker
               type="button"
               title={p.hint}
               onClick={() => onChange(p.permisos)}
-              className="rounded-full border border-line px-3 py-1 text-xs text-ink-secondary transition-colors hover:border-[var(--primary-orange)] hover:text-ink-primary"
+              className="rounded-full border border-line px-3 py-1 text-xs text-ink-secondary transition-colors hover:border-accent hover:text-ink-primary"
             >
               {p.label}
             </button>
@@ -57,8 +57,8 @@ export function PermissionPicker({ value, onChange, disabled }: PermissionPicker
                 <label
                   key={p.key}
                   className={`flex items-start gap-2 rounded-md border px-3 py-2 text-sm transition-colors ${
-                    on ? 'border-[var(--primary-orange)]/50 bg-[var(--primary-orange)]/10' : 'border-line'
-                  } ${disabled ? 'cursor-not-allowed opacity-70' : 'cursor-pointer hover:border-[var(--primary-orange)]/40'}`}
+                    on ? 'border-accent/50 bg-accent/10' : 'border-line'
+                  } ${disabled ? 'cursor-not-allowed opacity-70' : 'cursor-pointer hover:border-accent/40'}`}
                 >
                   <input
                     type="checkbox"
@@ -79,7 +79,7 @@ export function PermissionPicker({ value, onChange, disabled }: PermissionPicker
       ))}
 
       {googleSinBusquedas && !disabled && (
-        <p className="text-xs text-amber-400">
+        <p className="text-xs text-warning">
           Google Places se usa dentro de las búsquedas: sin «Búsquedas» este usuario no podrá aprovecharlo.
         </p>
       )}

@@ -9,24 +9,20 @@ import { useAuth } from '@/hooks/useAuth';
 import { STATUS_LABEL } from '@/components/prospects/Filters';
 import type { ReportBucket } from '@/lib/data/admin';
 import type { ProspectStatus } from '@/types/domain';
+import { CHART_ACCENT, CHART_PEACH, axisTick, categoryTick, gridStroke, tooltipProps } from '@/lib/chartTheme';
 
-const tooltipStyle = {
-  contentStyle: { background: 'var(--background-card)', border: '1px solid var(--card-border)', borderRadius: 8, fontSize: 12 },
-  labelStyle: { color: 'var(--text-primary)' },
-};
-
-function BarCard({ title, data, color = '#ff6600' }: { title: string; data: ReportBucket[]; color?: string }) {
+function BarCard({ title, data, color = CHART_ACCENT }: { title: string; data: ReportBucket[]; color?: string }) {
   return (
     <Card>
-      <h2 className="mb-4 font-heading text-lg text-ink-primary">{title}</h2>
+      <h2 className="mb-4 card-title">{title}</h2>
       <div className="h-64">
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={data} layout="vertical" margin={{ left: 8, right: 16 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="rgba(150,39,0,0.2)" horizontal={false} />
-            <XAxis type="number" allowDecimals={false} tick={{ fontSize: 10, fill: 'var(--text-muted)' }} axisLine={false} tickLine={false} />
-            <YAxis type="category" dataKey="label" width={110} tick={{ fontSize: 11, fill: 'var(--text-secondary)' }} axisLine={false} tickLine={false} />
-            <Tooltip {...tooltipStyle} cursor={{ fill: 'rgba(255,102,0,0.06)' }} />
-            <Bar dataKey="cantidad" fill={color} radius={[0, 4, 4, 0]} maxBarSize={22} />
+            <CartesianGrid strokeDasharray="2 4" stroke={gridStroke} horizontal={false} />
+            <XAxis type="number" allowDecimals={false} tick={axisTick} axisLine={false} tickLine={false} />
+            <YAxis type="category" dataKey="label" width={110} tick={categoryTick} axisLine={false} tickLine={false} />
+            <Tooltip {...tooltipProps} />
+            <Bar dataKey="cantidad" fill={color} radius={[0, 3, 3, 0]} maxBarSize={18} />
           </BarChart>
         </ResponsiveContainer>
       </div>
@@ -70,6 +66,7 @@ export default function Reports() {
   return (
     <div>
       <PageHeader
+        eyebrow="Analítica"
         title="Reportes"
         description={`${data.total} prospectos analizados.`}
         actions={can('exportar')
@@ -78,24 +75,24 @@ export default function Reports() {
       />
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
         <BarCard title="Por ciudad" data={data.porCiudad} />
-        <BarCard title="Por rubro" data={data.porRubro} color="#ffa35d" />
+        <BarCard title="Por rubro" data={data.porRubro} color={CHART_PEACH} />
         <Card>
-          <h2 className="mb-4 font-heading text-lg text-ink-primary">Embudo por estado</h2>
+          <h2 className="mb-4 card-title">Embudo por estado</h2>
           <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={funnel} layout="vertical" margin={{ left: 8, right: 16 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="rgba(150,39,0,0.2)" horizontal={false} />
-                <XAxis type="number" allowDecimals={false} tick={{ fontSize: 10, fill: 'var(--text-muted)' }} axisLine={false} tickLine={false} />
-                <YAxis type="category" dataKey="label" width={90} tick={{ fontSize: 11, fill: 'var(--text-secondary)' }} axisLine={false} tickLine={false} />
-                <Tooltip {...tooltipStyle} cursor={{ fill: 'rgba(255,102,0,0.06)' }} />
-                <Bar dataKey="cantidad" radius={[0, 4, 4, 0]} maxBarSize={22}>
-                  {funnel.map((_, i) => <Cell key={i} fill={`hsl(24, 100%, ${60 - i * 5}%)`} />)}
+                <CartesianGrid strokeDasharray="2 4" stroke={gridStroke} horizontal={false} />
+                <XAxis type="number" allowDecimals={false} tick={axisTick} axisLine={false} tickLine={false} />
+                <YAxis type="category" dataKey="label" width={90} tick={categoryTick} axisLine={false} tickLine={false} />
+                <Tooltip {...tooltipProps} />
+                <Bar dataKey="cantidad" radius={[0, 3, 3, 0]} maxBarSize={18}>
+                  {funnel.map((_, i) => <Cell key={i} fill={CHART_ACCENT} fillOpacity={Math.max(0.35, 1 - i * 0.1)} />)}
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
           </div>
         </Card>
-        <BarCard title="Por fuente" data={data.porFuente} color="#962700" />
+        <BarCard title="Por fuente" data={data.porFuente} color="#b3754d" />
       </div>
     </div>
   );

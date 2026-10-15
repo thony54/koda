@@ -14,23 +14,22 @@ export const Badge: React.FC<BadgeProps> = ({
   className = '',
 }) => {
   const variantClasses = {
-    default: 'bg-surface-elevated text-ink-secondary border-line',
-    primary:
-      'bg-[var(--primary-orange)]/10 text-[var(--primary-orange)] border-[var(--primary-orange)]/20',
-    success: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
-    warning: 'bg-amber-500/10 text-amber-400 border-amber-500/20',
-    error: 'bg-red-500/10 text-red-400 border-red-500/20',
-    info: 'bg-blue-500/10 text-blue-400 border-blue-500/20',
+    default: 'bg-veil/[0.06] text-ink-secondary border-line',
+    primary: 'bg-accent/10 text-accent-text border-accent/25',
+    success: 'bg-success/10 text-success border-success/25',
+    warning: 'bg-warning/10 text-warning border-warning/25',
+    error: 'bg-danger/10 text-danger border-danger/25',
+    info: 'bg-info/10 text-info border-info/25',
   };
 
   const sizeClasses = {
-    sm: 'px-2 py-0.5 text-xs',
-    md: 'px-2.5 py-1 text-sm',
+    sm: 'px-2 py-0.5 text-[11px]',
+    md: 'px-2.5 py-1 text-xs',
   };
 
   return (
     <span
-      className={`inline-flex items-center font-medium rounded-full border ${variantClasses[variant]} ${sizeClasses[size]} ${className}`}
+      className={`inline-flex items-center whitespace-nowrap font-medium rounded-sm border ${variantClasses[variant]} ${sizeClasses[size]} ${className}`}
     >
       {children}
     </span>

@@ -30,12 +30,12 @@ export function ScopeSwitcher() {
   }
 
   return (
-    <label className="flex items-center gap-1.5 text-xs text-ink-muted" title="Datos que estás viendo">
-      <Eye className="h-3.5 w-3.5" />
+    <label className="flex items-center gap-2 text-xs text-ink-muted" title="Datos que estás viendo">
+      <Eye className="hidden h-3.5 w-3.5 sm:block" />
       <select
         value={ownerId ?? ALL}
         onChange={(e) => onChange(e.target.value)}
-        className="glass-input max-w-[170px] cursor-pointer rounded-md px-2 py-1.5 text-xs text-ink-primary outline-none"
+        className="glass-input h-8 max-w-[132px] cursor-pointer sm:max-w-[180px] appearance-none rounded-md px-2.5 text-xs text-ink-primary outline-none"
         aria-label="Ver datos de"
       >
         <option value={profile.id}>Mis datos</option>
@@ -58,8 +58,8 @@ export function ScopeBanner() {
 
   const todos = ownerId === null;
   return (
-    <div className="mb-4 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-md border border-[var(--primary-orange)]/30 bg-[var(--primary-orange)]/10 px-3 py-2 text-sm">
-      <Eye className="h-4 w-4 text-[var(--primary-orange)]" />
+    <div className="mb-5 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-md border border-accent/30 bg-accent/[0.08] px-3.5 py-2.5 text-sm">
+      <Eye className="h-4 w-4 text-accent-text" />
       <span className="text-ink-primary">
         {todos
           ? 'Estás viendo los datos de TODOS los usuarios mezclados.'
@@ -67,7 +67,7 @@ export function ScopeBanner() {
       </span>
       <button
         onClick={() => { setScope(profile.id, 'Mis datos'); qc.invalidateQueries(); }}
-        className="ml-auto text-xs font-medium text-[var(--primary-orange)] hover:underline"
+        className="ml-auto text-xs font-medium text-accent-text hover:underline"
       >
         Volver a mis datos
       </button>

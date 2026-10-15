@@ -116,7 +116,7 @@ export default function Import() {
             <Upload className="h-8 w-8 text-ink-muted" />
             <div>
               <p className="text-ink-primary">Arrastra un CSV aquí o</p>
-              <button onClick={() => fileRef.current?.click()} className="text-[var(--primary-orange)] hover:underline">
+              <button onClick={() => fileRef.current?.click()} className="text-accent-text hover:underline">
                 selecciona un archivo
               </button>
             </div>
@@ -143,12 +143,12 @@ export default function Import() {
 
           {/* Mapeo de columnas */}
           <Card>
-            <h2 className="mb-3 font-heading text-lg text-ink-primary">Mapeo de columnas</h2>
+            <h2 className="mb-3 card-title">Mapeo de columnas</h2>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
               {IMPORT_FIELDS.map((f) => (
                 <label key={f.key} className="space-y-1">
                   <span className="text-xs font-medium text-ink-secondary">
-                    {f.label} {f.required && <span className="text-[var(--primary-orange)]">*</span>}
+                    {f.label} {f.required && <span className="text-accent-text">*</span>}
                   </span>
                   <select
                     value={mapping[f.key] ?? ''}
@@ -162,7 +162,7 @@ export default function Import() {
               ))}
             </div>
             {!mapping.nombre && (
-              <p className="mt-3 flex items-center gap-1.5 text-sm text-amber-400">
+              <p className="mt-3 flex items-center gap-1.5 text-sm text-warning">
                 <AlertTriangle className="h-4 w-4" /> Elige qué columna es el nombre para continuar.
               </p>
             )}
@@ -172,8 +172,8 @@ export default function Import() {
           {mapping.nombre && (
             <div className="grid grid-cols-3 gap-4">
               <Card><p className="text-sm text-ink-secondary">Filas</p><p className="font-heading text-2xl text-ink-primary">{inputs.length}</p></Card>
-              <Card><p className="text-sm text-ink-secondary">Nuevos</p><p className="font-heading text-2xl text-emerald-400">{nuevos}</p></Card>
-              <Card><p className="text-sm text-ink-secondary">Duplicados</p><p className="font-heading text-2xl text-amber-400">{dupCount}</p></Card>
+              <Card><p className="text-sm text-ink-secondary">Nuevos</p><p className="font-heading text-2xl text-success">{nuevos}</p></Card>
+              <Card><p className="text-sm text-ink-secondary">Duplicados</p><p className="font-heading text-2xl text-warning">{dupCount}</p></Card>
             </div>
           )}
 
@@ -181,7 +181,7 @@ export default function Import() {
           {mapping.nombre && preview.length > 0 && (
             <Card padding="none">
               <div className="border-b border-line px-5 py-3">
-                <h2 className="font-heading text-lg text-ink-primary">Vista previa (primeras 8)</h2>
+                <h2 className="card-title">Vista previa (primeras 8)</h2>
               </div>
               <Table>
                 <THead>

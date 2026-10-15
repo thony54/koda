@@ -21,21 +21,22 @@ export const Button: React.FC<ButtonProps> = ({
   ...props
 }) => {
   const sizeClasses = {
-    sm: 'px-3 py-1.5 text-xs min-h-[36px]',
-    md: 'px-4 py-2 text-sm min-h-[40px]',
-    lg: 'px-6 py-3 text-base min-h-[48px]',
+    sm: 'h-8 px-3 text-xs',
+    md: 'h-9 px-4 text-[13px]',
+    lg: 'h-11 px-6 text-sm',
   };
 
   const variantClasses = {
-    primary: 'glass-button text-white font-bold border border-transparent',
+    primary: 'glass-button font-semibold',
     secondary:
-      'bg-transparent border border-[var(--primary-orange)] text-[var(--primary-orange)] hover:bg-[var(--primary-orange)]/10',
-    ghost: 'text-ink-secondary hover:text-ink-primary hover:bg-white/5',
-    danger: 'bg-red-600 text-white hover:bg-red-700 shadow-lg shadow-red-500/20',
+      'border border-line-strong bg-surface-elevated/60 text-ink-primary hover:bg-surface-elevated hover:border-accent/45',
+    ghost: 'text-ink-secondary hover:text-ink-primary hover:bg-veil/[0.06]',
+    danger:
+      'border border-danger/35 bg-danger/10 text-danger hover:bg-danger/20 hover:border-danger/55',
   };
 
   const base =
-    'inline-flex items-center justify-center gap-2 font-medium font-sans rounded-md transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-[var(--background-dark)] focus:ring-[var(--primary-orange)] disabled:opacity-50 disabled:cursor-not-allowed active:scale-95';
+    'inline-flex items-center justify-center gap-2 whitespace-nowrap font-medium font-sans rounded-md transition-[background-color,border-color,color,box-shadow,filter] duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 focus-visible:ring-offset-2 focus-visible:ring-offset-surface-void disabled:opacity-50 disabled:cursor-not-allowed';
 
   const composed = `${base} ${sizeClasses[size]} ${variantClasses[variant]} ${className}`;
 

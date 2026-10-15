@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Plus, Trash2, Loader2, Play } from 'lucide-react';
 import { PageHeader } from '@/components/layout/PageHeader';
-import { Card, Button, Input, Table, THead, TBody, TR, TH, TD } from '@/components/ui';
+import { Card, Button, Input, Switch, Table, THead, TBody, TR, TH, TD } from '@/components/ui';
 import { ScoreBadge } from '@/components/prospects/ScoreBadge';
 import { useScoringRules, useScoringMutations, useSimulationBase } from '@/hooks/useAdmin';
 import { clampScore } from '@/lib/scoring';
@@ -104,7 +104,7 @@ export default function Scoring() {
               <TBody>
                 {(rules ?? []).map((r) => (
                   <TR key={r.id} className={r.activa ? '' : 'opacity-50'}>
-                    <TD><code className="text-xs text-[var(--primary-orange)]">{r.clave}</code></TD>
+                    <TD><code className="text-xs text-accent-text">{r.clave}</code></TD>
                     <TD className="text-ink-secondary">{r.descripcion}</TD>
                     <TD className="text-right">
                       <input
@@ -116,16 +116,10 @@ export default function Scoring() {
                       />
                     </TD>
                     <TD>
-                      <button
-                        onClick={() => toggleActiva(r)}
-                        className={`h-5 w-9 rounded-full transition-colors ${r.activa ? 'bg-[var(--primary-orange)]' : 'bg-surface-elevated'} relative`}
-                        aria-label="Activar/desactivar"
-                      >
-                        <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-white transition-all ${r.activa ? 'left-[18px]' : 'left-0.5'}`} />
-                      </button>
+                      <Switch checked={r.activa} onChange={() => toggleActiva(r)} />
                     </TD>
                     <TD>
-                      <button onClick={() => removeRule(r)} className="text-ink-muted hover:text-red-400" aria-label="Eliminar">
+                      <button onClick={() => removeRule(r)} className="text-ink-muted hover:text-danger" aria-label="Eliminar">
                         <Trash2 className="h-4 w-4" />
                       </button>
                     </TD>
@@ -139,8 +133,8 @@ export default function Scoring() {
         {/* Simulador */}
         <Card>
           <div className="mb-3 flex items-center gap-2">
-            <Play className="h-4 w-4 text-[var(--primary-orange)]" />
-            <h2 className="font-heading text-lg text-ink-primary">Simulador</h2>
+            <Play className="h-4 w-4 text-accent-text" />
+            <h2 className="card-title">Simulador</h2>
           </div>
           <p className="mb-3 text-xs text-ink-muted">
             Top 20 con las reglas actuales. Cambiá los puntos y la lista se reordena al instante.

@@ -96,6 +96,7 @@ export default function Prospects() {
   return (
     <div>
       <PageHeader
+        eyebrow="Base de datos"
         title="Prospectos"
         description="La base de prospectos calificados de Connexo."
         actions={
@@ -111,15 +112,15 @@ export default function Prospects() {
 
       {/* Barra de acciones en lote */}
       {selected.size > 0 && (
-        <div className="mb-3 flex flex-wrap items-center gap-2 rounded-md border border-[var(--primary-orange)]/30 bg-[var(--primary-orange)]/10 px-3 py-2 text-sm">
-          <span className="font-medium text-[var(--primary-orange)]">
+        <div className="mb-3 flex flex-wrap items-center gap-2 rounded-md border border-accent/30 bg-accent/[0.08] px-3.5 py-2 text-[13px]">
+          <span className="num font-medium text-accent-text">
             {selected.size} seleccionado(s)
           </span>
           <div className="mx-1 h-4 w-px bg-line" />
-          <button onClick={() => bulkStatus('calificado')} className="rounded px-2 py-1 text-ink-secondary hover:bg-white/5 hover:text-ink-primary">Marcar calificado</button>
-          <button onClick={() => bulkStatus('descartado')} className="rounded px-2 py-1 text-ink-secondary hover:bg-white/5 hover:text-ink-primary">Descartar</button>
+          <button onClick={() => bulkStatus('calificado')} className="rounded px-2 py-1 text-ink-secondary hover:bg-veil/[0.08] hover:text-ink-primary">Marcar calificado</button>
+          <button onClick={() => bulkStatus('descartado')} className="rounded px-2 py-1 text-ink-secondary hover:bg-veil/[0.08] hover:text-ink-primary">Descartar</button>
           {canExport && (
-            <button onClick={bulkExport} className="rounded px-2 py-1 text-ink-secondary hover:bg-white/5 hover:text-ink-primary">Exportar selección</button>
+            <button onClick={bulkExport} className="rounded px-2 py-1 text-ink-secondary hover:bg-veil/[0.08] hover:text-ink-primary">Exportar selección</button>
           )}
           <button onClick={() => setSelected(new Set())} className="ml-auto rounded px-2 py-1 text-ink-muted hover:text-ink-primary">Limpiar</button>
         </div>
@@ -154,24 +155,24 @@ export default function Prospects() {
           />
 
           {/* Paginación */}
-          <div className="mt-3 flex items-center justify-between text-sm text-ink-secondary">
-            <span>
+          <div className="mt-4 flex items-center justify-between text-[13px] text-ink-secondary">
+            <span className="num">
               {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, total)} de {total}
             </span>
             <div className="flex items-center gap-1">
               <button
                 onClick={() => setPage((p) => Math.max(1, p - 1))}
                 disabled={page <= 1}
-                className="rounded-md border border-line p-1.5 disabled:opacity-40 hover:enabled:bg-white/5"
+                className="rounded-md border border-line-strong bg-surface-inset p-1.5 transition-colors disabled:opacity-40 hover:enabled:border-accent/45 hover:enabled:text-ink-primary"
                 aria-label="Anterior"
               >
                 <ChevronLeft className="h-4 w-4" />
               </button>
-              <span className="px-2">{page} / {totalPages}</span>
+              <span className="num px-2">{page} / {totalPages}</span>
               <button
                 onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
                 disabled={page >= totalPages}
-                className="rounded-md border border-line p-1.5 disabled:opacity-40 hover:enabled:bg-white/5"
+                className="rounded-md border border-line-strong bg-surface-inset p-1.5 transition-colors disabled:opacity-40 hover:enabled:border-accent/45 hover:enabled:text-ink-primary"
                 aria-label="Siguiente"
               >
                 <ChevronRight className="h-4 w-4" />

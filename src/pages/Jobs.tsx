@@ -145,12 +145,12 @@ export default function Jobs() {
                 <TD>{j.ultimo ? <Badge variant={statusVariant[j.ultimo.status] ?? 'default'}>{j.ultimo.status}</Badge> : <Badge>{j.activo ? 'activa' : 'inactiva'}</Badge>}</TD>
                 <TD>
                   <div className="flex items-center gap-1">
-                    <button title="Ejecutar ahora" disabled={running === j.id} onClick={() => runNow(j)} className="p-1 text-ink-muted hover:text-[var(--primary-orange)] disabled:opacity-50">
+                    <button title="Ejecutar ahora" disabled={running === j.id} onClick={() => runNow(j)} className="p-1 text-ink-muted hover:text-accent-text disabled:opacity-50">
                       {running === j.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
                     </button>
                     <Link to={`/busquedas/${j.id}/runs`} title="Historial" className="p-1 text-ink-muted hover:text-ink-primary"><History className="h-4 w-4" /></Link>
                     <button title="Editar" onClick={() => setEditing({ id: j.id, nombre: j.nombre, source_id: j.source_id, query: j.query, ciudad: j.ciudad ?? '', radio_metros: j.radio_metros ?? 15000, cron: j.cron ?? '', activo: j.activo, max_resultados: j.max_resultados ?? 60, categorias: j.categorias ?? [] })} className="p-1 text-ink-muted hover:text-ink-primary text-xs">✎</button>
-                    <button title="Eliminar" onClick={() => del(j)} className="p-1 text-ink-muted hover:text-red-400"><Trash2 className="h-4 w-4" /></button>
+                    <button title="Eliminar" onClick={() => del(j)} className="p-1 text-ink-muted hover:text-danger"><Trash2 className="h-4 w-4" /></button>
                   </div>
                 </TD>
               </TR>
@@ -184,7 +184,7 @@ export default function Jobs() {
             </div>
 
             {missingGoogleKey && (
-              <p className="rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-300">
+              <p className="rounded-md border border-warning/30 bg-warning/10 px-3 py-2 text-xs text-warning">
                 Para buscar con Google necesitas tu propia API key.{' '}
                 <Link to="/configuracion/integraciones" className="font-medium underline">Agrégala en Integraciones</Link>.
                 Puedes guardar la búsqueda, pero no se ejecutará hasta entonces.
@@ -209,7 +209,7 @@ export default function Jobs() {
                         onClick={() => toggleRubro(r.value)}
                         className={`rounded-full border px-3 py-1 text-xs transition-colors ${
                           on
-                            ? 'border-[var(--primary-orange)] bg-[var(--primary-orange)]/15 text-[var(--primary-orange)]'
+                            ? 'border-accent bg-accent/15 text-accent-text'
                             : 'border-line text-ink-secondary hover:text-ink-primary'
                         }`}
                       >

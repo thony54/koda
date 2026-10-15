@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Plus, Trash2, Loader2, KeyRound } from 'lucide-react';
 import { PageHeader } from '@/components/layout/PageHeader';
-import { Card, Button, Input, Select, Badge, Table, THead, TBody, TR, TH, TD } from '@/components/ui';
+import { Card, Button, Input, Select, Badge, Switch, Table, THead, TBody, TR, TH, TD } from '@/components/ui';
 import { useSources, useSourceMutations } from '@/hooks/useAdmin';
 import { useUIStore } from '@/store/uiStore';
 import type { Source } from '@/lib/data/admin';
@@ -47,9 +47,9 @@ export default function Sources() {
         actions={<Button size="sm" onClick={() => setShowAdd((v) => !v)}><Plus className="h-4 w-4" /> Nueva fuente</Button>}
       />
 
-      <Card className="mb-4 border border-amber-500/20 bg-amber-500/[0.06]">
+      <Card className="mb-4 border border-warning/20 bg-warning/[0.06]">
         <p className="flex items-start gap-2 text-sm text-ink-secondary">
-          <KeyRound className="mt-0.5 h-4 w-4 shrink-0 text-amber-400" />
+          <KeyRound className="mt-0.5 h-4 w-4 shrink-0 text-warning" />
           Las claves de API (Google Places, etc.) NO se guardan aquí: viven en los
           <em> Secrets </em> de Supabase (Edge Functions) y nunca llegan al navegador.
         </p>
@@ -86,12 +86,10 @@ export default function Sources() {
                 <TD className="text-ink-muted">{s.base_url ?? '—'}</TD>
                 <TD className="text-right text-ink-secondary">{s.rate_limit_por_min}</TD>
                 <TD>
-                  <button onClick={() => toggle(s)} className={`h-5 w-9 rounded-full transition-colors relative ${s.activo ? 'bg-[var(--primary-orange)]' : 'bg-surface-elevated'}`} aria-label="Activar/desactivar">
-                    <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-white transition-all ${s.activo ? 'left-[18px]' : 'left-0.5'}`} />
-                  </button>
+                  <Switch checked={s.activo} onChange={() => toggle(s)} />
                 </TD>
                 <TD>
-                  <button onClick={() => del(s)} className="text-ink-muted hover:text-red-400" aria-label="Eliminar"><Trash2 className="h-4 w-4" /></button>
+                  <button onClick={() => del(s)} className="text-ink-muted hover:text-danger" aria-label="Eliminar"><Trash2 className="h-4 w-4" /></button>
                 </TD>
               </TR>
             ))}

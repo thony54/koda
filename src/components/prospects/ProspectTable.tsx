@@ -39,7 +39,7 @@ function SortHeader({
     <TH className={align === 'right' ? 'text-right' : ''}>
       <button
         onClick={() => onSort(field)}
-        className={`inline-flex items-center gap-1 hover:text-ink-primary ${active ? 'text-[var(--primary-orange)]' : ''}`}
+        className={`inline-flex items-center gap-1 uppercase tracking-[inherit] transition-colors hover:text-ink-primary ${active ? 'text-accent-text' : ''}`}
       >
         {label}
         {active && (dir === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />)}
@@ -65,7 +65,7 @@ export function ProspectTable({
                 checked={allSelected}
                 onChange={onToggleAll}
                 aria-label="Seleccionar todos"
-                className="accent-[var(--primary-orange)]"
+                
               />
             </TH>
             <SortHeader field="nombre" label="Prospecto" active={sortBy === 'nombre'} dir={sortDir} onSort={onSort} />
@@ -82,7 +82,7 @@ export function ProspectTable({
           {rows.map((p) => (
             <TR
               key={p.id}
-              className="cursor-pointer"
+              className={`cursor-pointer ${selected.has(p.id) ? 'bg-accent/[0.06] hover:bg-accent/[0.09]' : ''}`}
               onClick={() => navigate(`/prospectos/${p.id}`)}
             >
               <TD onClick={(e) => e.stopPropagation()}>
@@ -91,15 +91,15 @@ export function ProspectTable({
                   checked={selected.has(p.id)}
                   onChange={() => onToggle(p.id)}
                   aria-label={`Seleccionar ${p.nombre}`}
-                  className="accent-[var(--primary-orange)]"
+                  
                 />
               </TD>
               <TD>
                 <div className="font-medium text-ink-primary">{p.nombre}</div>
-                <div className="text-xs text-ink-muted capitalize">{p.categoria}</div>
+                <div className="mt-0.5 text-xs capitalize text-ink-muted">{p.categoria}</div>
               </TD>
               <TD>
-                <span className="inline-flex items-center gap-1 text-ink-secondary">
+                <span className="inline-flex items-center gap-1.5 text-ink-secondary">
                   <MapPin className="h-3 w-3 text-ink-muted" />
                   {p.ciudad}
                 </span>
@@ -108,7 +108,7 @@ export function ProspectTable({
               <TD><ScoreBadge score={p.score} /></TD>
               <TD>
                 {p.plan_sugerido && (
-                  <span className="text-xs font-semibold text-ink-secondary">{p.plan_sugerido}</span>
+                  <span className="num text-xs font-medium text-ink-secondary">{p.plan_sugerido}</span>
                 )}
               </TD>
               <TD>
@@ -117,14 +117,14 @@ export function ProspectTable({
                 </Badge>
               </TD>
               <TD>
-                <div className="flex items-center gap-1.5 text-ink-muted">
+                <div className="flex items-center gap-2 text-ink-muted">
                   {(p.whatsapp || p.contactos?.some((c) => c.tipo === 'telefono')) && <Phone className="h-3.5 w-3.5" />}
                   {p.contactos?.some((c) => c.tipo === 'email') && <Mail className="h-3.5 w-3.5" />}
                   {p.tiene_website && <Globe className="h-3.5 w-3.5" />}
                   {p.instagram && <Instagram className="h-3.5 w-3.5" />}
                 </div>
               </TD>
-              <TD className="text-xs text-ink-muted whitespace-nowrap">{timeAgo(p.last_seen_at)}</TD>
+              <TD className="num whitespace-nowrap text-xs text-ink-muted">{timeAgo(p.last_seen_at)}</TD>
             </TR>
           ))}
         </TBody>

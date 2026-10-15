@@ -24,6 +24,10 @@ interface ScoreBadgeProps {
   showLabel?: boolean;
 }
 
+/** Mezcla el color de banda con transparente (los tokens son var(), no hex). */
+const tint = (color: string, pct: number) =>
+  `color-mix(in srgb, ${color} ${pct}%, transparent)`;
+
 export function ScoreBadge({ score, showLabel = false }: ScoreBadgeProps) {
   const band = bandForScore(score);
   const meta = bandMeta[band];
@@ -31,16 +35,21 @@ export function ScoreBadge({ score, showLabel = false }: ScoreBadgeProps) {
 
   return (
     <span
-      className="inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-xs font-semibold"
-      style={{ color, borderColor: color, backgroundColor: `${color}1a` }}
+      className="inline-flex items-center gap-1.5 rounded-sm border px-2 py-0.5 text-xs font-medium"
+      style={{
+        color,
+        borderColor: tint(color, 38),
+        backgroundColor: tint(color, 11),
+        boxShadow: band === 'hot' ? `0 0 14px -4px ${tint(color, 70)}` : undefined,
+      }}
       title={`${meta.emoji} ${meta.label} — ${score}/100`}
     >
       <span
         className="h-1.5 w-1.5 rounded-full"
-        style={{ backgroundColor: color }}
+        style={{ backgroundColor: color, boxShadow: `0 0 6px ${tint(color, 80)}` }}
         aria-hidden
       />
-      {score}
+      <span className="num">{score}</span>
       {showLabel && <span className="font-normal">· {meta.label}</span>}
     </span>
   );

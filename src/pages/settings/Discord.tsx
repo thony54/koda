@@ -147,7 +147,7 @@ export default function Discord() {
         <h3 className="mb-1 font-semibold text-ink-primary">Canales y webhooks</h3>
         <p className="mb-3 text-sm text-ink-secondary">
           Los webhooks son tuyos y se guardan cifrados: se pegan en{' '}
-          <Link to="/configuracion/integraciones" className="text-[var(--primary-orange)] hover:underline">Integraciones</Link>.
+          <Link to="/configuracion/integraciones" className="text-accent-text hover:underline">Integraciones</Link>.
           Aquí ves cuáles están activos y los pruebas.
           {isSuperAdmin && ' Como administrador, si no configuras uno propio se usa el secreto global del proyecto.'}
         </p>
@@ -155,7 +155,7 @@ export default function Discord() {
         {status.isLoading ? (
           <div className="flex items-center gap-2 py-4 text-ink-muted"><Loader2 className="h-4 w-4 animate-spin" /> Consultando estado…</div>
         ) : status.isError ? (
-          <p className="text-sm text-red-400">
+          <p className="text-sm text-danger">
             No se pudo consultar el estado. ¿Está desplegada la función koda-notifier?
           </p>
         ) : (

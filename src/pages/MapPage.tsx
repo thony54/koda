@@ -50,7 +50,7 @@ export default function MapPage() {
           <select
             value={city}
             onChange={(e) => setCity(e.target.value)}
-            className="glass-input rounded-md px-3 py-1.5 text-sm text-ink-primary outline-none"
+            className="glass-input h-9 cursor-pointer appearance-none rounded-md px-3 text-[13px] text-ink-primary outline-none"
           >
             {cities.map((c) => <option key={c} value={c}>{c === 'todas' ? 'Todas las ciudades' : c}</option>)}
           </select>
@@ -67,14 +67,14 @@ export default function MapPage() {
           <div className="mb-3 flex flex-wrap gap-4">
             {(Object.keys(BAND_META) as ScoreBand[]).map((b) => (
               <span key={b} className="inline-flex items-center gap-1.5 text-xs text-ink-secondary">
-                <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: SCORE_VAR[b] }} />
+                <span className="h-2 w-2 rounded-full" style={{ backgroundColor: SCORE_VAR[b], boxShadow: `0 0 8px ${SCORE_VAR[b]}` }} />
                 {BAND_META[b].emoji} {BAND_META[b].label}
               </span>
             ))}
-            <span className="ml-auto text-xs text-ink-muted">{filtered.length} prospectos</span>
+            <span className="num ml-auto text-xs text-ink-muted">{filtered.length} prospectos</span>
           </div>
 
-          <div className="w-full overflow-x-auto rounded-md border border-line bg-surface-base">
+          <div className="w-full overflow-x-auto rounded-md border border-line bg-surface-inset">
             <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ maxHeight: 520 }}>
               {filtered.map((p) => {
                 const { x, y } = proj(p.lat, p.lng);

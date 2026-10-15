@@ -47,29 +47,29 @@ export const Modal: React.FC<ModalProps> = ({
       aria-label={title}
     >
       <div
-        className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+        className="absolute inset-0 animate-fade-in bg-black/70 backdrop-blur-sm"
         onClick={onClose}
       />
       <div
-        className={`glass-panel relative w-full ${sizeClasses[size]} rounded-lg animate-fade-in-up max-h-[90vh] flex flex-col`}
+        className={`glass-panel panel-ember relative flex max-h-[90vh] w-full flex-col rounded-lg shadow-pop animate-fade-in-up ${sizeClasses[size]}`}
       >
         <div className="flex items-center justify-between border-b border-line px-5 py-4">
           {title && (
-            <h2 className="text-lg font-heading font-semibold text-ink-primary">
+            <h2 className="font-heading text-base font-semibold text-ink-primary">
               {title}
             </h2>
           )}
           <button
             onClick={onClose}
-            className="ml-auto p-1.5 rounded-md text-ink-muted hover:text-ink-primary hover:bg-white/5 transition-colors"
+            className="ml-auto rounded-md p-1.5 text-ink-muted transition-colors hover:bg-veil/[0.06] hover:text-ink-primary"
             aria-label="Cerrar"
           >
-            <X className="h-5 w-5" />
+            <X className="h-4 w-4" />
           </button>
         </div>
-        <div className="px-5 py-4 overflow-y-auto">{children}</div>
+        <div className="overflow-y-auto px-5 py-5">{children}</div>
         {footer && (
-          <div className="flex items-center justify-end gap-2 border-t border-line px-5 py-4">
+          <div className="flex items-center justify-end gap-2 rounded-b-lg border-t border-line bg-surface-base/60 px-5 py-4">
             {footer}
           </div>
         )}

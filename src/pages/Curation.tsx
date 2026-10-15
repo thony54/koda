@@ -121,7 +121,7 @@ export default function Curation() {
         </Card>
 
         <Card>
-          <h2 className="mb-2 font-heading text-lg text-ink-primary">¿Qué es esto?</h2>
+          <h2 className="mb-2 card-title">¿Qué es esto?</h2>
           <p className="text-sm text-ink-secondary">
             Instagram y TikTok <strong>prohíben el scraping</strong>, así que KODA no
             puede buscar creadores solos como hace con los negocios (OSM/Google).
@@ -138,7 +138,7 @@ export default function Curation() {
             <em> creadores de contenido</em> entran por acá, a mano.
           </p>
           {ultimo && (
-            <div className="mt-4 rounded-md border border-emerald-500/30 bg-emerald-500/10 p-3">
+            <div className="mt-4 rounded-md border border-success/30 bg-success/10 p-3">
               <p className="text-sm font-medium text-ink-primary">Último agregado</p>
               <div className="mt-1 flex items-center justify-between">
                 <span className="text-sm text-ink-secondary">{ultimo.nombre}</span>
@@ -146,7 +146,7 @@ export default function Curation() {
               </div>
               <button
                 onClick={() => navigate(`/prospectos/${ultimo.id}`)}
-                className="mt-2 text-xs text-[var(--primary-orange)] hover:underline"
+                className="mt-2 text-xs text-accent-text hover:underline"
               >
                 Ver ficha →
               </button>

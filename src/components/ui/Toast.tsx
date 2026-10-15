@@ -4,18 +4,19 @@ import { useUIStore } from '@/store/uiStore';
 
 export type NotificationType = 'success' | 'error' | 'warning' | 'info';
 
-const typeStyles: Record<NotificationType, string> = {
-  success: 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400',
-  error: 'bg-red-500/10 border-red-500/30 text-red-400',
-  warning: 'bg-amber-500/10 border-amber-500/30 text-amber-400',
-  info: 'bg-blue-500/10 border-blue-500/30 text-blue-400',
+/** Barra lateral + color del icono por tipo. */
+const typeStyles: Record<NotificationType, { bar: string; icon: string }> = {
+  success: { bar: 'bg-success', icon: 'text-success' },
+  error: { bar: 'bg-danger', icon: 'text-danger' },
+  warning: { bar: 'bg-warning', icon: 'text-warning' },
+  info: { bar: 'bg-info', icon: 'text-info' },
 };
 
 const icons: Record<NotificationType, React.ReactNode> = {
-  success: <CheckCircle2 className="w-5 h-5" />,
-  error: <XCircle className="w-5 h-5" />,
-  warning: <AlertTriangle className="w-5 h-5" />,
-  info: <Info className="w-5 h-5" />,
+  success: <CheckCircle2 className="h-[18px] w-[18px]" />,
+  error: <XCircle className="h-[18px] w-[18px]" />,
+  warning: <AlertTriangle className="h-[18px] w-[18px]" />,
+  info: <Info className="h-[18px] w-[18px]" />,
 };
 
 interface ToastItemProps {
@@ -30,19 +31,22 @@ const ToastItem: React.FC<ToastItemProps> = ({ message, type, onClose }) => {
     return () => clearTimeout(timer);
   }, [onClose]);
 
+  const s = typeStyles[type];
+
   return (
     <div
-      className={`px-4 py-3 rounded-md border backdrop-blur-sm shadow-lg animate-slide-in-right flex items-center gap-3 ${typeStyles[type]}`}
+      className="glass-panel relative flex animate-slide-in-right items-center gap-3 overflow-hidden rounded-md py-3 pl-5 pr-3 shadow-pop sm:min-w-[280px] sm:max-w-sm"
       role="alert"
     >
-      {icons[type]}
-      <span className="font-medium text-sm text-ink-primary">{message}</span>
+      <span className={`absolute inset-y-0 left-0 w-[3px] ${s.bar}`} aria-hidden />
+      <span className={`shrink-0 ${s.icon}`}>{icons[type]}</span>
+      <span className="flex-1 text-sm text-ink-primary">{message}</span>
       <button
         onClick={onClose}
-        className="ml-2 p-1 hover:bg-white/10 rounded transition-colors"
+        className="rounded p-1 text-ink-muted transition-colors hover:bg-veil/[0.08] hover:text-ink-primary"
         aria-label="Cerrar aviso"
       >
-        <X className="w-4 h-4" />
+        <X className="h-3.5 w-3.5" />
       </button>
     </div>
   );
@@ -54,7 +58,7 @@ export const ToastHost: React.FC = () => {
   const dismissToast = useUIStore((s) => s.dismissToast);
 
   return (
-    <div className="fixed bottom-6 right-6 z-[60] flex flex-col gap-2">
+    <div className="fixed bottom-5 left-4 right-4 z-[60] flex flex-col items-stretch gap-2 sm:left-auto sm:right-6 sm:items-end">
       {toasts.map((t) => (
         <ToastItem
           key={t.id}

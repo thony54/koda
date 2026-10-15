@@ -36,6 +36,12 @@ export async function resetUserPassword(userId: string, password: string): Promi
   await invokeUsers({ action: 'reset_password', user_id: userId, password });
 }
 
+/** ¿Hay una API key de Google en los secretos globales del proyecto? (respaldo del super admin) */
+export async function getGlobalGoogleKeyStatus(): Promise<boolean> {
+  const r = await invokeUsers<{ google_places: boolean }>({ action: 'global_status' });
+  return Boolean(r.google_places);
+}
+
 /** Contraseña temporal legible (sin caracteres que se confundan: 0/O, 1/l/I). */
 export function generatePassword(length = 12): string {
   const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789';

@@ -5,6 +5,7 @@
 // Acciones:
 //   { action: 'create', email, password, nombre?, rol?, permisos?, tope_costo_mensual? }
 //   { action: 'reset_password', user_id, password }
+//   { action: 'global_status' }  → { google_places: boolean } (¿existe la clave global?)
 import { corsHeaders, json } from '../_shared/cors.ts';
 import { getAdminClient, requireCaller } from '../_shared/supabaseAdmin.ts';
 import { ROLES_VALIDOS, sanearPermisos } from '../_shared/permisos.ts';
@@ -76,6 +77,12 @@ Deno.serve(async (req) => {
         despues: { email, rol, permisos },
       });
       return json({ ok: true, user: { id: uid, email } });
+    }
+
+    // ── Qué secretos globales del proyecto respaldan al super admin ────────
+    // Solo se informa si existen; el valor nunca sale de la función.
+    if (body?.action === 'global_status') {
+      return json({ ok: true, google_places: Boolean(Deno.env.get('GOOGLE_PLACES_API_KEY')) });
     }
 
     // ── Restablecer contraseña ────────────────────────────────────────────

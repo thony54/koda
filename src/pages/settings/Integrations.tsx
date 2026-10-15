@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { CheckCircle2, ExternalLink, Loader2, Lock, ShieldCheck, Trash2, XCircle } from 'lucide-react';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Badge, Button, Card, Input } from '@/components/ui';
@@ -6,6 +7,8 @@ import { useAuth } from '@/hooks/useAuth';
 import { useMySecrets, useSecretMutations } from '@/hooks/useSecrets';
 import { useUIStore } from '@/store/uiStore';
 import { timeAgo } from '@/lib/format';
+import { getWebhookStatus, type Canal } from '@/lib/data/notifications';
+import { getGlobalGoogleKeyStatus } from '@/lib/data/users';
 import type { SecretKey } from '@/lib/data/secrets';
 
 interface SecretRowProps {
@@ -16,10 +19,12 @@ interface SecretRowProps {
   inputLabel: string;
   /** Si es false, la fila se muestra bloqueada. */
   enabled: boolean;
+  /** Solo super admin: ya hay un secreto global del proyecto que respalda esta fila. */
+  globalActive?: boolean;
 }
 
 /** Una credencial propia: se puede guardar, reemplazar y borrar, pero nunca volver a leer. */
-function SecretRow({ clave, label, description, placeholder, inputLabel, enabled }: SecretRowProps) {
+function SecretRow({ clave, label, description, placeholder, inputLabel, enabled, globalActive }: SecretRowProps) {
   const { data: secrets, isLoading } = useMySecrets();
   const { save, remove } = useSecretMutations();
   const toast = useUIStore((s) => s.toast);
@@ -62,6 +67,11 @@ function SecretRow({ clave, label, description, placeholder, inputLabel, enabled
           <Badge variant="success">
             <CheckCircle2 className="mr-1 inline h-3 w-3" />
             Configurado · ····{current.ultimos4 ?? ''}
+          </Badge>
+        ) : globalActive ? (
+          <Badge variant="info">
+            <CheckCircle2 className="mr-1 inline h-3 w-3" />
+            Activa · global del proyecto
           </Badge>
         ) : (
           <Badge variant="default"><XCircle className="mr-1 inline h-3 w-3" />Sin configurar</Badge>
@@ -112,6 +122,22 @@ export default function Integrations() {
   const canGoogle = can('google_places');
   const canDiscord = can('discord');
 
+  // El super admin tiene respaldo en los secretos globales de Supabase: si no hay
+  // clave propia, la fila debe decir que SÍ funciona (no "Sin configurar").
+  const globalGoogle = useQuery({
+    queryKey: ['global-google-key'],
+    queryFn: getGlobalGoogleKeyStatus,
+    enabled: isSuperAdmin && canGoogle,
+    retry: false,
+  });
+  const webhooks = useQuery({
+    queryKey: ['webhook-status'],
+    queryFn: getWebhookStatus,
+    enabled: isSuperAdmin && canDiscord,
+    retry: false,
+  });
+  const hookActive = (canal: Canal) => isSuperAdmin && Boolean(webhooks.data?.[canal]);
+
   return (
     <div>
       <PageHeader
@@ -139,6 +165,7 @@ export default function Integrations() {
             inputLabel="API key"
             placeholder="AIza…"
             enabled
+            globalActive={isSuperAdmin && globalGoogle.data === true}
           />
         ) : (
           <Locked text="Google Places no está habilitado para tu usuario. Pídele al administrador que lo active." />
@@ -170,21 +197,25 @@ export default function Integrations() {
               clave="discord_webhook_hot" label="Calientes"
               description="Prospectos que cruzan el umbral de score"
               inputLabel="URL del webhook" placeholder="https://discord.com/api/webhooks/…" enabled
+              globalActive={hookActive('hot')}
             />
             <SecretRow
               clave="discord_webhook_nuevos" label="Nuevos"
               description="Altas recientes en tu base"
               inputLabel="URL del webhook" placeholder="https://discord.com/api/webhooks/…" enabled
+              globalActive={hookActive('nuevos')}
             />
             <SecretRow
               clave="discord_webhook_reportes" label="Reportes"
               description="Resumen diario de tus prospectos"
               inputLabel="URL del webhook" placeholder="https://discord.com/api/webhooks/…" enabled
+              globalActive={hookActive('reportes')}
             />
             <SecretRow
               clave="discord_webhook_errores" label="Errores"
               description="Fallos de tus búsquedas"
               inputLabel="URL del webhook" placeholder="https://discord.com/api/webhooks/…" enabled
+              globalActive={hookActive('errores')}
             />
           </div>
         ) : (

@@ -13,7 +13,7 @@ import type { UserRole } from '@/types/database';
 const ROLE_OPTIONS: { value: UserRole; label: string }[] = [
   { value: 'analista', label: 'Analista — puede editar sus datos' },
   { value: 'lector', label: 'Lector — solo consulta' },
-  { value: 'super_admin', label: 'Super Admin — administra todo' },
+  { value: 'super_admin', label: 'Super Admin — todas las funciones, sobre su propia base' },
 ];
 
 const DEFAULT_PRESET = PERMISSION_PRESETS.find((p) => p.id === 'prospeccion')!.permisos;
@@ -156,7 +156,7 @@ export function CreateUserModal({ open, onClose }: { open: boolean; onClose: () 
           <span className="mb-2 block text-sm font-medium text-ink-secondary">Funciones habilitadas</span>
           <PermissionPicker value={permisos} onChange={setPermisos} disabled={rol === 'super_admin'} />
           {rol === 'super_admin' && (
-            <p className="mt-2 text-xs text-ink-muted">El Super Admin tiene todas las funciones y ve los datos de todos los usuarios.</p>
+            <p className="mt-2 text-xs text-ink-muted">El Super Admin tiene todas las funciones, pero solo sobre sus propios datos: no ve lo de otros ni administra usuarios.</p>
           )}
         </div>
         <p className="text-xs text-ink-muted">
@@ -263,7 +263,7 @@ export function EditUserModal({ user, isSelf, onClose }: { user: UserProfile | n
           <span className="mb-2 block text-sm font-medium text-ink-secondary">Funciones habilitadas</span>
           <PermissionPicker value={permisos} onChange={setPermisos} disabled={rol === 'super_admin'} />
           {rol === 'super_admin' && (
-            <p className="mt-2 text-xs text-ink-muted">El Super Admin tiene todas las funciones.</p>
+            <p className="mt-2 text-xs text-ink-muted">El Super Admin tiene todas las funciones, pero solo sobre sus propios datos.</p>
           )}
         </div>
 

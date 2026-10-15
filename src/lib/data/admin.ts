@@ -107,6 +107,7 @@ export interface UserProfile {
   nombre: string | null;
   rol: UserRole;
   activo: boolean;
+  es_propietario: boolean;
   permisos: PermissionKey[];
   tope_costo_mensual: number | null;
   creado_por: string | null;

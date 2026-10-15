@@ -57,6 +57,8 @@ export interface Profile {
   nombre: string | null;
   rol: UserRole;
   activo: boolean;
+  /** Cuenta propietaria de KODA (una sola): administra usuarios, ve datos ajenos y usa los secretos globales. */
+  es_propietario: boolean;
   /** Funciones habilitadas. El super_admin las tiene todas sin necesidad de listarlas. */
   permisos: PermissionKey[];
   /** Tope mensual de costo de APIs de pago; null = valor por defecto del servidor. */

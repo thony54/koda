@@ -41,7 +41,7 @@ export function useSourceMutations() {
 }
 
 // ── Usuarios ─────────────────────────────────────────────────────────────
-/** `enabled=false` para usuarios que no son Super Admin (RLS solo les deja ver su propio perfil). */
+/** `enabled=false` para usuarios que no son la cuenta propietaria (RLS solo les deja ver su propio perfil). */
 export function useUsers(enabled = true) {
   return useQuery({ queryKey: ['users'], queryFn: listUsers, enabled });
 }

@@ -8,8 +8,14 @@ export const secretWebhook = (canal: Canal) => `discord_webhook_${canal}`;
 
 export interface OwnerInfo {
   id: string | null;
-  /** super_admin (o aviso de sistema sin dueño): puede usar los secretos globales. */
+  /** super_admin (o aviso de sistema): tiene todas las funciones habilitadas. */
   isAdmin: boolean;
+  /**
+   * Cuenta propietaria (o aviso de sistema sin dueño): ÚNICA que puede usar los secretos
+   * globales del proyecto (API key de Google, webhooks de Discord). Cualquier otro
+   * usuario —aunque sea super_admin— solo usa los suyos propios.
+   */
+  esPropietario: boolean;
   activo: boolean;
   permisos: string[];
   /** Tope mensual de costo propio; null = usar el valor por defecto de la función. */
@@ -36,16 +42,17 @@ function globalWebhooks(): Record<Canal, string | null> {
 async function loadOwner(admin: SupabaseClient, ownerId: string | null): Promise<OwnerInfo> {
   // Aviso de sistema sin dueño → se comporta como el administrador (webhooks globales).
   if (!ownerId) {
-    return { id: null, isAdmin: true, activo: true, permisos: [], tope: null, webhooks: globalWebhooks() };
+    return { id: null, isAdmin: true, esPropietario: true, activo: true, permisos: [], tope: null, webhooks: globalWebhooks() };
   }
 
   const { data: p } = await admin
     .from('profiles')
-    .select('rol, activo, permisos, tope_costo_mensual')
+    .select('rol, activo, permisos, tope_costo_mensual, es_propietario')
     .eq('id', ownerId)
     .maybeSingle();
 
   const isAdmin = p?.rol === 'super_admin';
+  const esPropietario = Boolean(p?.es_propietario);
   // Si Vault falla, no frenamos la ingesta: solo se pierden los avisos a Discord.
   let propios: Record<string, string> = {};
   try {
@@ -53,7 +60,8 @@ async function loadOwner(admin: SupabaseClient, ownerId: string | null): Promise
   } catch (e) {
     console.error('[owners] no se pudieron leer los webhooks de', ownerId, e instanceof Error ? e.message : e);
   }
-  const globales = isAdmin ? globalWebhooks() : null;
+  // Los webhooks globales son del propietario: otro usuario jamás publica en esos canales.
+  const globales = esPropietario ? globalWebhooks() : null;
 
   const webhooks = {} as Record<Canal, string | null>;
   for (const c of CANALES) {
@@ -64,6 +72,7 @@ async function loadOwner(admin: SupabaseClient, ownerId: string | null): Promise
   return {
     id: ownerId,
     isAdmin,
+    esPropietario,
     activo: Boolean(p?.activo),
     permisos: (p?.permisos ?? []) as string[],
     tope: p?.tope_costo_mensual != null ? Number(p.tope_costo_mensual) : null,

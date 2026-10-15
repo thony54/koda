@@ -1,11 +1,11 @@
 // koda-digest (Fase 3): arma un resumen y lo ENCOLA como notificación 'reportes'.
 // El koda-notifier lo envía a Discord en su próxima corrida. Así el digest reutiliza
 // el reintento y el manejo de webhooks del notifier.
-// Body opcional: { periodo_horas?: number, owner_id?: string (solo super_admin) }.
+// Body opcional: { periodo_horas?: number, owner_id?: string (solo la cuenta propietaria) }.
 //
 // MULTIUSUARIO: el resumen es POR USUARIO y solo cuenta SUS prospectos.
 //  - Llamado por el cron  → genera un resumen para cada usuario activo con webhook de `reportes`.
-//  - Llamado por un usuario → genera solo el suyo (el super_admin puede indicar otro `owner_id`).
+//  - Llamado por un usuario → genera solo el suyo (solo la cuenta propietaria puede indicar otro `owner_id`).
 import { corsHeaders, json } from '../_shared/cors.ts';
 import { getAdminClient, requireCaller } from '../_shared/supabaseAdmin.ts';
 import { createOwnerCache } from '../_shared/owners.ts';
@@ -30,7 +30,7 @@ Deno.serve(async (req) => {
       const { data: ps } = await admin.from('profiles').select('id').eq('activo', true);
       ownerIds = (ps ?? []).map((p) => p.id as string);
     } else {
-      const objetivo = caller.isAdmin && typeof body?.owner_id === 'string' ? body.owner_id : caller.id;
+      const objetivo = caller.esPropietario && typeof body?.owner_id === 'string' ? body.owner_id : caller.id;
       ownerIds = [objetivo];
     }
 

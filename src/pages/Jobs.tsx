@@ -38,7 +38,7 @@ const emptyJob: JobInput = { nombre: '', source_id: null, query: '', ciudad: '',
 export default function Jobs() {
   const { data: jobs, isLoading } = useJobs();
   const { data: allSources } = useSources();
-  const { can, isSuperAdmin } = useAuth();
+  const { can, isOwner } = useAuth();
   const { data: mySecrets } = useMySecrets();
   const { upsert, remove } = useJobMutations();
   // Google Places solo aparece si el administrador lo habilitó para este usuario.
@@ -67,7 +67,7 @@ export default function Jobs() {
   const selectedSource = sources.find((s) => s.id === editing?.source_id);
   const isGoogle = /google/i.test(selectedSource?.nombre ?? '');
   // El super admin puede caer a la clave global del proyecto; el resto necesita la suya.
-  const missingGoogleKey = isGoogle && !isSuperAdmin && mySecrets !== undefined && !mySecrets.google_places_api_key;
+  const missingGoogleKey = isGoogle && !isOwner && mySecrets !== undefined && !mySecrets.google_places_api_key;
 
   async function save() {
     if (!editing) return;

@@ -65,14 +65,14 @@ export default function App() {
             <Route path="curaduria" element={<RequireAccess permiso="curaduria"><Curation /></RequireAccess>} />
             <Route path="mapa" element={<RequireAccess permiso="mapa"><MapPage /></RequireAccess>} />
             <Route path="reportes" element={<RequireAccess permiso="reportes"><Reports /></RequireAccess>} />
-            <Route path="logs" element={<RequireAccess roles={['super_admin']}><Logs /></RequireAccess>} />
+            <Route path="logs" element={<RequireAccess propietario><Logs /></RequireAccess>} />
 
             <Route path="configuracion/integraciones" element={<Integrations />} />
             <Route path="configuracion/discord" element={<RequireAccess permiso="discord"><Discord /></RequireAccess>} />
-            <Route path="configuracion/scoring" element={<RequireAccess roles={['super_admin']}><Scoring /></RequireAccess>} />
-            <Route path="configuracion/fuentes" element={<RequireAccess roles={['super_admin']}><Sources /></RequireAccess>} />
-            <Route path="configuracion/usuarios" element={<RequireAccess roles={['super_admin']}><UsersAdmin /></RequireAccess>} />
-            <Route path="configuracion/privacidad" element={<RequireAccess roles={['super_admin']}><Privacy /></RequireAccess>} />
+            <Route path="configuracion/scoring" element={<RequireAccess propietario><Scoring /></RequireAccess>} />
+            <Route path="configuracion/fuentes" element={<RequireAccess propietario><Sources /></RequireAccess>} />
+            <Route path="configuracion/usuarios" element={<RequireAccess propietario><UsersAdmin /></RequireAccess>} />
+            <Route path="configuracion/privacidad" element={<RequireAccess propietario><Privacy /></RequireAccess>} />
 
             <Route path="*" element={<NotFound />} />
           </Route>

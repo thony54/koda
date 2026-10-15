@@ -3,8 +3,9 @@
 // navegador (regla de oro, sección 3).
 //
 // MULTIUSUARIO: como service_role se salta RLS, cada función debe aplicar a mano
-// el aislamiento por dueño. `requireCaller` identifica quién llama y `can()` /
-// `caller.isAdmin` sirven para decidir qué puede tocar.
+// el aislamiento por dueño. `requireCaller` identifica quién llama; `can()` decide
+// qué FUNCIONES tiene, y `caller.esPropietario` es lo único que permite salirse de
+// "lo mío" (datos ajenos, usuarios, secretos globales).
 import { createClient, type SupabaseClient } from 'npm:@supabase/supabase-js@2';
 
 export function getAdminClient(): SupabaseClient {
@@ -22,8 +23,14 @@ export interface Caller {
   /** uuid del usuario, o 'cron' si llama pg_cron / el servidor con la service_role. */
   id: string;
   isCron: boolean;
-  /** super_admin (o cron): puede operar sobre datos de cualquier dueño. */
+  /** super_admin (o cron): tiene TODAS las funciones, pero solo sobre lo suyo. */
   isAdmin: boolean;
+  /**
+   * Cuenta propietaria de KODA (profiles.es_propietario) o cron. Es la ÚNICA que puede
+   * operar sobre datos de otros dueños, administrar usuarios y usar los secretos
+   * globales del proyecto. Un super_admin que no es propietario NO lo tiene.
+   */
+  esPropietario: boolean;
   rol: string | null;
   permisos: string[];
 }
@@ -37,7 +44,7 @@ function safeEqual(a: string, b: string): boolean {
   return diff === 0;
 }
 
-const CRON_CALLER: Caller = { id: 'cron', isCron: true, isAdmin: true, rol: 'super_admin', permisos: [] };
+const CRON_CALLER: Caller = { id: 'cron', isCron: true, isAdmin: true, esPropietario: true, rol: 'super_admin', permisos: [] };
 
 /**
  * Verifica que quien invoca la función esté autenticado Y activo (JWT de usuario)
@@ -71,7 +78,7 @@ export async function requireCaller(req: Request, admin: SupabaseClient): Promis
 
   const { data: prof } = await admin
     .from('profiles')
-    .select('rol, activo, permisos')
+    .select('rol, activo, permisos, es_propietario')
     .eq('id', data.user.id)
     .maybeSingle();
   if (!prof || !prof.activo) throw new Error('No autorizado: tu cuenta está desactivada.');
@@ -80,6 +87,7 @@ export async function requireCaller(req: Request, admin: SupabaseClient): Promis
     id: data.user.id,
     isCron: false,
     isAdmin: prof.rol === 'super_admin',
+    esPropietario: Boolean(prof.es_propietario),
     rol: prof.rol,
     permisos: (prof.permisos ?? []) as string[],
   };

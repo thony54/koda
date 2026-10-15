@@ -17,7 +17,7 @@ search_job → koda-collector → raw_records → koda-normalizer → prospects 
 | `koda-scorer` | Calcula `score`, `score_desglose` y `plan_sugerido` desde las señales y `scoring_rules`. Encola aviso si cruza a caliente (umbral configurable en `app_config.hot_threshold`). | `{}` o `{ all: true }` |
 | `koda-notifier` | **(Fase 3)** Envía a Discord la cola de `notifications` pendientes según el canal. | `{}` (enviar cola) · `{ check: true }` (estado webhooks) · `{ test: true, canal }` (prueba) |
 | `koda-digest` | **(Fase 3)** Arma un resumen (nuevos, calientes, por ciudad) y lo encola como notificación `reportes`. **Por usuario**: el cron genera uno para cada usuario con webhook de reportes. | `{}` o `{ periodo_horas }` |
-| `koda-users` | **(Multiusuario)** Alta de cuentas y restablecer contraseña. Solo Super Admin (usa la Auth Admin API, que necesita la `service_role`). | `{ action: 'create', email, password, nombre, rol, permisos, tope_costo_mensual }` · `{ action: 'reset_password', user_id, password }` |
+| `koda-users` | **(Multiusuario)** Alta de cuentas y restablecer contraseña. Solo la **cuenta propietaria** (`profiles.es_propietario`; otro Super Admin NO puede) (usa la Auth Admin API, que necesita la `service_role`). | `{ action: 'create', email, password, nombre, rol, permisos, tope_costo_mensual }` · `{ action: 'reset_password', user_id, password }` |
 
 `_shared/` tiene utilidades reutilizables (normalización, dedupe, scoring, fuentes,
 dueños/webhooks por usuario).
@@ -39,7 +39,7 @@ en el código**:
   (ejecutable únicamente por `service_role`). El navegador solo ve los últimos 4
   caracteres.
 - Los secretos globales (`GOOGLE_PLACES_API_KEY`, `DISCORD_WEBHOOK_*`) quedan como
-  respaldo **solo del Super Admin** y de los avisos de sistema sin dueño.
+  respaldo **solo de la cuenta propietaria** y de los avisos de sistema sin dueño (otro Super Admin usa únicamente sus propias claves).
 - Los webhooks escritos por usuarios deben ser de `discord.com` (anti-SSRF).
 
 Los rubros de OSM (qué se traduce cada categoría a tags de OpenStreetMap) viven en
@@ -81,6 +81,13 @@ supabase functions deploy koda-users      # Multiusuario
 > el front. Las funciones nuevas dependen de las columnas y RPC de esa migración.
 
 ## Migraciones nuevas
+
+- `0008_propietario.sql`: jerarquía de dos niveles. `profiles.es_propietario` (una sola cuenta,
+  índice único) es la única que crea/edita usuarios, ve datos ajenos, escribe la configuración
+  global y usa los secretos globales; un Super Admin normal tiene todas las funciones pero
+  solo sobre lo suyo. Un trigger impide quitar/degradar/borrar al propietario desde la app.
+  Además revoca el acceso público a `anonimizar_prospectos_antiguos()` y exige que las
+  etiquetas sean del mismo dueño que el prospecto. Idempotente.
 
 - `0006_multiusuario.sql`: convierte KODA a multiusuario. Agrega `profiles.permisos`
   y `owner_id` en prospectos / búsquedas / ejecuciones / etiquetas (todo lo existente

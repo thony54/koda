@@ -87,7 +87,7 @@ export default function UsersAdmin() {
                   </TD>
                   <TD>
                     <Badge variant={isAdminRole ? 'primary' : u.rol === 'analista' ? 'info' : 'default'}>
-                      {roleLabel[u.rol]}
+                      {u.es_propietario ? 'Propietario' : roleLabel[u.rol]}
                     </Badge>
                   </TD>
                   <TD>
@@ -151,7 +151,7 @@ export default function UsersAdmin() {
       <p className="mt-4 flex items-start gap-1.5 text-xs text-ink-muted">
         <ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0" />
         No hay registro público: las cuentas se crean aquí. Cada usuario trabaja con su propia base de prospectos,
-        sus búsquedas y sus claves; solo el Super Admin puede ver los datos de todos (botón del ojo).
+        sus búsquedas y sus claves. Solo la cuenta propietaria crea usuarios y puede ver los datos de todos (botón del ojo); un Super Admin tiene todas las funciones, pero únicamente sobre lo suyo.
       </p>
 
       <CreateUserModal open={creating} onClose={() => setCreating(false)} />

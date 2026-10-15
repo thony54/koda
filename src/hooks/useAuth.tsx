@@ -19,7 +19,10 @@ interface AuthContextValue {
   loading: boolean;
   /** Usuario con sesión y perfil activo. Base de ProtectedRoute. */
   isAuthorized: boolean;
+  /** Rol super_admin: todas las funciones, pero solo sobre SU propia base. */
   isSuperAdmin: boolean;
+  /** Cuenta propietaria: la única que administra usuarios, ve datos ajenos y edita la configuración global. */
+  isOwner: boolean;
   /** ¿Tiene esta función habilitada? (Super Admin: siempre.) Sin clave: solo "activo". */
   can: (permiso?: PermissionKey) => boolean;
   /** true cuando NO hay Supabase configurado (falta .env.local). */
@@ -140,6 +143,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const loading = initializing || (Boolean(session) && profileUid !== session?.user?.id);
   const isAuthorized = Boolean(session && profile?.activo);
   const isSuperAdmin = Boolean(profile?.activo && profile.rol === 'super_admin');
+  const isOwner = Boolean(profile?.activo && profile.es_propietario);
   const can = (permiso?: PermissionKey) => hasPermission(profile, permiso);
 
   return (
@@ -150,6 +154,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         loading,
         isAuthorized,
         isSuperAdmin,
+        isOwner,
         can,
         notConfigured: !supabaseConfigured,
         signIn,

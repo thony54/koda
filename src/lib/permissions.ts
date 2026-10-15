@@ -74,10 +74,13 @@ export function hasPermission(profile: Profile | null | undefined, key?: Permiss
 export interface AccessRule {
   roles?: UserRole[];
   permiso?: PermissionKey;
+  /** Pantalla reservada a la cuenta propietaria (administración y configuración global). */
+  propietario?: boolean;
 }
 
 export function canAccess(profile: Profile | null | undefined, rule: AccessRule): boolean {
   if (!profile?.activo) return false;
+  if (rule.propietario && !profile.es_propietario) return false;
   if (rule.roles?.length && !rule.roles.includes(profile.rol)) return false;
   return hasPermission(profile, rule.permiso);
 }

@@ -7,16 +7,16 @@ import { useScopeStore } from '@/store/scopeStore';
 const ALL = '__all__';
 
 /**
- * Selector del Super Admin: ¿de quién son los datos que estoy viendo?
+ * Selector de la cuenta propietaria: ¿de quién son los datos que estoy viendo?
  * Los usuarios normales no lo ven (RLS ya les muestra solo lo suyo).
  */
 export function ScopeSwitcher() {
-  const { profile, isSuperAdmin } = useAuth();
-  const { data: users } = useUsers(isSuperAdmin);
+  const { profile, isOwner } = useAuth();
+  const { data: users } = useUsers(isOwner);
   const { ownerId, setScope } = useScopeStore();
   const qc = useQueryClient();
 
-  if (!isSuperAdmin || !profile) return null;
+  if (!isOwner || !profile) return null;
 
   function onChange(value: string) {
     if (value === ALL) setScope(null, 'Todos los usuarios');
@@ -50,11 +50,11 @@ export function ScopeSwitcher() {
 
 /** Aviso persistente cuando el admin mira (o escribe en) los datos de otra persona. */
 export function ScopeBanner() {
-  const { profile, isSuperAdmin } = useAuth();
+  const { profile, isOwner } = useAuth();
   const { ownerId, label, setScope } = useScopeStore();
   const qc = useQueryClient();
 
-  if (!isSuperAdmin || !profile || ownerId === profile.id) return null;
+  if (!isOwner || !profile || ownerId === profile.id) return null;
 
   const todos = ownerId === null;
   return (

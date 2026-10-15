@@ -118,7 +118,7 @@ function Locked({ text }: { text: string }) {
 }
 
 export default function Integrations() {
-  const { can, isSuperAdmin } = useAuth();
+  const { can, isOwner } = useAuth();
   const canGoogle = can('google_places');
   const canDiscord = can('discord');
 
@@ -127,16 +127,16 @@ export default function Integrations() {
   const globalGoogle = useQuery({
     queryKey: ['global-google-key'],
     queryFn: getGlobalGoogleKeyStatus,
-    enabled: isSuperAdmin && canGoogle,
+    enabled: isOwner && canGoogle,
     retry: false,
   });
   const webhooks = useQuery({
     queryKey: ['webhook-status'],
     queryFn: getWebhookStatus,
-    enabled: isSuperAdmin && canDiscord,
+    enabled: isOwner && canDiscord,
     retry: false,
   });
-  const hookActive = (canal: Canal) => isSuperAdmin && Boolean(webhooks.data?.[canal]);
+  const hookActive = (canal: Canal) => isOwner && Boolean(webhooks.data?.[canal]);
 
   return (
     <div>
@@ -165,7 +165,7 @@ export default function Integrations() {
             inputLabel="API key"
             placeholder="AIza…"
             enabled
-            globalActive={isSuperAdmin && globalGoogle.data === true}
+            globalActive={isOwner && globalGoogle.data === true}
           />
         ) : (
           <Locked text="Google Places no está habilitado para tu usuario. Pídele al administrador que lo active." />
@@ -180,7 +180,7 @@ export default function Integrations() {
               <ExternalLink className="h-3 w-3" /> Crear una API key
             </a>
             <span>Recomendado: restringe la key a «Places API (New)».</span>
-            {isSuperAdmin && <span>Si no configuras una, se usa la clave global del proyecto.</span>}
+            {isOwner && <span>Si no configuras una, se usa la clave global del proyecto.</span>}
           </div>
         )}
       </Card>

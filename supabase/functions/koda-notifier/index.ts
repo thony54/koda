@@ -7,7 +7,7 @@
 // MULTIUSUARIO: cada usuario guarda sus propios webhooks (cifrados en Vault, se
 // configuran en Configuración → Integraciones). Los secretos globales
 //   DISCORD_WEBHOOK_HOT | _NUEVOS | _REPORTES | _ERRORES  (y _DEFAULT)
-// solo respaldan al super_admin y a los avisos de sistema sin dueño.
+// solo respaldan a la cuenta propietaria y a los avisos de sistema sin dueño.
 import { corsHeaders, json } from '../_shared/cors.ts';
 import { getAdminClient, requireCaller } from '../_shared/supabaseAdmin.ts';
 import { CANALES, type Canal, postToDiscord } from '../_shared/discord.ts';
@@ -72,12 +72,20 @@ Deno.serve(async (req) => {
     }
 
     // ── Modo normal: vaciar la cola de pendientes ─────────────────────────
-    const { data: pend, error } = await admin
+    // El cron vacía la cola de todos; la cuenta propietaria, la suya y la del sistema;
+    // cualquier otro usuario, solo la suya.
+    let pendQuery = admin
       .from('notifications')
       .select('id, prospect_id, owner_id, canal, payload, intento')
       .eq('status', 'pendiente')
       .order('created_at', { ascending: true })
       .limit(50);
+    if (!caller.isCron) {
+      pendQuery = caller.esPropietario
+        ? pendQuery.or(`owner_id.eq.${caller.id},owner_id.is.null`)
+        : pendQuery.eq('owner_id', caller.id);
+    }
+    const { data: pend, error } = await pendQuery;
     if (error) throw error;
     if (!pend || pend.length === 0) return json({ ok: true, enviados: 0 });
 
@@ -95,13 +103,13 @@ Deno.serve(async (req) => {
       const url = owner.webhooks[n.canal as Canal];
 
       if (!url) {
-        // Admin / sistema: sigue siendo un error visible. Un usuario sin webhook
+        // Propietario / sistema: sigue siendo un error visible. Un usuario sin webhook
         // simplemente no usa ese canal: se marca "omitido" sin ruido.
         await admin.from('notifications').update({
-          status: owner.isAdmin ? 'error' : 'omitido',
+          status: owner.esPropietario ? 'error' : 'omitido',
           error_mensaje: `Sin webhook para "${n.canal}"`,
         }).eq('id', n.id);
-        if (owner.isAdmin) fallidos++;
+        if (owner.esPropietario) fallidos++;
         continue;
       }
       try {

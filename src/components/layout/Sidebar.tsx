@@ -105,7 +105,7 @@ export function Sidebar() {
               <p className="truncate text-[13px] font-medium text-ink-primary">{displayName}</p>
               {profile?.rol && (
                 <p className="eyebrow mt-0.5 !text-[9.5px] !tracking-[0.12em]">
-                  {roleLabel[profile.rol] ?? profile.rol}
+                  {profile.es_propietario ? 'Propietario' : (roleLabel[profile.rol] ?? profile.rol)}
                 </p>
               )}
             </div>

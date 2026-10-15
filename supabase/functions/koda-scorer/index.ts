@@ -1,7 +1,7 @@
 // koda-scorer (sección 7.3): calcula score, desglose y plan desde las señales y
 // las reglas activas. Si un prospecto cruza a la banda caliente, encola aviso.
 //
-// MULTIUSUARIO: las reglas de scoring son globales (las gestiona el super_admin).
+// MULTIUSUARIO: las reglas de scoring son globales (las gestiona la cuenta propietaria).
 // El aviso "caliente" se encola con el dueño del prospecto y solo si ese dueño
 // tiene webhook de Discord para el canal `hot`.
 import { corsHeaders, json } from '../_shared/cors.ts';
@@ -29,14 +29,11 @@ Deno.serve(async (req) => {
     const HOT = Number(cfg?.valor ?? 75) || 75;
 
     // Prospectos a calificar: los recién normalizados (desglose vacío) o todos.
-    // Un usuario normal que pide `all` re-califica solo LO SUYO; el pendiente
-    // (desglose vacío) es parte del pipeline compartido y se procesa para todos.
+    // Solo el cron y la cuenta propietaria procesan prospectos de todos; cualquier otro
+    // usuario califica únicamente LO SUYO (y no ve ni cuenta lo de los demás).
     let q = admin.from('prospects').select('id, score, owner_id').limit(300);
-    if (all) {
-      if (!caller.isAdmin) q = q.eq('owner_id', caller.id);
-    } else {
-      q = q.filter('score_desglose', 'eq', '{}');
-    }
+    if (!caller.esPropietario) q = q.eq('owner_id', caller.id);
+    if (!all) q = q.filter('score_desglose', 'eq', '{}');
     const { data: pending, error: pErr } = await q;
     if (pErr) throw pErr;
     if (!pending || pending.length === 0) return json({ ok: true, calificados: 0, calientes: 0 });

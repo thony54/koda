@@ -159,13 +159,16 @@ Deno.serve(async (req) => {
   const getOwner = createOwnerCache(admin);
 
   try {
-    await requireCaller(req, admin);
+    const caller = await requireCaller(req, admin);
 
-    const { data: raws, error } = await admin
+    // El cron y la cuenta propietaria procesan lo de todos; cualquier otro usuario, solo lo suyo.
+    let rawQuery = admin
       .from('raw_records')
       .select('id, run_id, source_id, owner_id, external_id, payload')
       .eq('procesado', false)
       .limit(50);
+    if (!caller.esPropietario) rawQuery = rawQuery.eq('owner_id', caller.id);
+    const { data: raws, error } = await rawQuery;
     if (error) throw error;
     if (!raws || raws.length === 0) return json({ ok: true, procesados: 0, nuevos: 0, duplicados: 0 });
 

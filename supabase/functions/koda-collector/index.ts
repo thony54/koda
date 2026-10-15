@@ -2,8 +2,9 @@
 // Entrada: { job_id }. Respeta rate limit, controla costo, nunca pierde el crudo.
 //
 // MULTIUSUARIO: el job pertenece a un dueño (search_jobs.owner_id). Solo el dueño,
-// el super_admin o el cron pueden ejecutarlo. La API key de Google es la del DUEÑO
-// (cifrada en Vault); el super_admin además puede usar el secreto global.
+// la cuenta propietaria o el cron pueden ejecutarlo (un super_admin que no es
+// propietario solo ejecuta lo suyo). La API key de Google es la del DUEÑO (cifrada en
+// Vault); solo la cuenta propietaria puede caer al secreto global del proyecto.
 import { corsHeaders, json } from '../_shared/cors.ts';
 import { getAdminClient, requireCaller } from '../_shared/supabaseAdmin.ts';
 import { geocodeCity, overpassSearch } from '../_shared/sources/osm.ts';
@@ -34,7 +35,7 @@ Deno.serve(async (req) => {
     ownerId = job.owner_id as string;
 
     // ── Autorización: service_role se salta RLS, así que se valida aquí ─────
-    if (!caller.isAdmin && ownerId !== caller.id) {
+    if (!caller.esPropietario && ownerId !== caller.id) {
       return json({ error: 'No tienes acceso a esta búsqueda.' }, 403);
     }
     const owner = await getOwner(ownerId);
@@ -72,12 +73,12 @@ Deno.serve(async (req) => {
         throw new Error('Tu usuario no tiene habilitado Google Places. Pídele al administrador que lo active.');
       }
 
-      // API key del dueño; el super_admin puede caer al secreto global del proyecto.
+      // API key del dueño; SOLO la cuenta propietaria puede caer al secreto global del proyecto.
       const secretos = await getOwnerSecrets(admin, ownerId, [SECRET_GOOGLE]);
-      const apiKey = secretos[SECRET_GOOGLE] ?? (owner.isAdmin ? Deno.env.get('GOOGLE_PLACES_API_KEY') : undefined);
+      const apiKey = secretos[SECRET_GOOGLE] ?? (owner.esPropietario ? Deno.env.get('GOOGLE_PLACES_API_KEY') : undefined);
       if (!apiKey) {
         throw new Error(
-          owner.isAdmin
+          owner.esPropietario
             ? 'Falta la API key de Google Places: agrégala en Configuración → Integraciones.'
             : 'Falta tu API key de Google Places: agrégala en Configuración → Integraciones.',
         );
@@ -138,7 +139,7 @@ Deno.serve(async (req) => {
     try {
       const owner = await getOwner(ownerId);
       const url = owner.webhooks.errores;
-      if (url || owner.isAdmin) {
+      if (url || owner.esPropietario) {
         const texto = `⚠️ Collector falló: ${msg}`;
         const enviado = await tryPost(url, texto);
         await admin.from('notifications').insert({

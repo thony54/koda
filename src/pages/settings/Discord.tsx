@@ -26,7 +26,7 @@ const statusVariant: Record<string, 'success' | 'warning' | 'error' | 'default'>
 export default function Discord() {
   const qc = useQueryClient();
   const toast = useUIStore((s) => s.toast);
-  const { isSuperAdmin } = useAuth();
+  const { isOwner } = useAuth();
   const [testing, setTesting] = useState<Canal | null>(null);
   const [busy, setBusy] = useState<'flush' | 'digest' | null>(null);
   const [threshold, setThreshold] = useState('');
@@ -105,9 +105,9 @@ export default function Discord() {
           <h3 className="mb-1 font-semibold text-ink-primary">Umbral de "caliente"</h3>
           <p className="mb-3 text-sm text-ink-secondary">
             Score mínimo para marcar un prospecto como caliente y avisar en Discord.
-            {!isSuperAdmin && ' Es un valor general que define el administrador.'}
+            {!isOwner && ' Es un valor general que define el administrador.'}
           </p>
-          {isSuperAdmin ? (
+          {isOwner ? (
             <div className="flex items-end gap-2">
               <Input
                 label="Score mínimo (0–100)"
@@ -149,7 +149,7 @@ export default function Discord() {
           Los webhooks son tuyos y se guardan cifrados: se pegan en{' '}
           <Link to="/configuracion/integraciones" className="text-accent-text hover:underline">Integraciones</Link>.
           Aquí ves cuáles están activos y los pruebas.
-          {isSuperAdmin && ' Como administrador, si no configuras uno propio se usa el secreto global del proyecto.'}
+          {isOwner && ' Como administrador, si no configuras uno propio se usa el secreto global del proyecto.'}
         </p>
 
         {status.isLoading ? (

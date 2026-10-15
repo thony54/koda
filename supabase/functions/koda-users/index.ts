@@ -1,4 +1,5 @@
-// koda-users: administración de usuarios. SOLO el super_admin.
+// koda-users: administración de usuarios. SOLO la cuenta propietaria de KODA
+// (profiles.es_propietario): ni siquiera otro super_admin puede crear ni tocar usuarios.
 // Crear cuentas requiere la service_role (Auth Admin API), por eso vive aquí y
 // no en el navegador. No hay registro público: todo usuario nace desde el panel.
 //
@@ -19,8 +20,8 @@ Deno.serve(async (req) => {
 
   try {
     const caller = await requireCaller(req, admin);
-    if (caller.isCron || caller.rol !== 'super_admin') {
-      return json({ error: 'Solo el Super Admin puede administrar usuarios.' }, 403);
+    if (caller.isCron || !caller.esPropietario) {
+      return json({ error: 'Solo la cuenta propietaria de KODA puede administrar usuarios.' }, 403);
     }
 
     const body = await req.json().catch(() => ({}));

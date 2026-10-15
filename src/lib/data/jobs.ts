@@ -61,7 +61,7 @@ export interface SearchJob {
   activo: boolean;
   max_resultados: number | null;
   last_run_at: string | null;
-  ultimo?: { status: JobStatus; encontrados: number; nuevos: number; finished_at: string | null } | null;
+  ultimo?: { status: JobStatus; encontrados: number; nuevos: number; finished_at: string | null; started_at?: string } | null;
 }
 
 interface JobRunEmbed {

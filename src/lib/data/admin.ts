@@ -194,6 +194,10 @@ export interface ReportData {
   porFuente: ReportBucket[];
   porStatus: ReportBucket[];
   porMes: ReportBucket[];
+  /** Caliente / Bueno / Tibio / Frío (mismos cortes que el KODA Score). */
+  porBanda: ReportBucket[];
+  ciudadesDistintas: number;
+  rubrosDistintos: number;
 }
 
 const STATUS_ORDER = [
@@ -202,11 +206,11 @@ const STATUS_ORDER = [
 
 export async function getReportData(): Promise<ReportData> {
   const { data, error } = await byOwner(
-    db.from('prospects').select('ciudad, categoria, source_id, status, first_seen_at, sources(nombre)'),
+    db.from('prospects').select('ciudad, categoria, source_id, status, score, first_seen_at, sources(nombre)'),
   );
   if (error) throw error;
   const rows = (data ?? []) as unknown as {
-    ciudad: string | null; categoria: string | null; status: string;
+    ciudad: string | null; categoria: string | null; status: string; score: number | null;
     first_seen_at: string; sources?: { nombre: string } | null;
   }[];
 
@@ -223,9 +227,30 @@ export async function getReportData(): Promise<ReportData> {
     .map((s) => ({ label: s, cantidad: rows.filter((r) => r.status === s).length }))
     .filter((b) => b.cantidad > 0);
 
-  const porMes = tally((r) =>
-    new Date(r.first_seen_at).toLocaleDateString('es-EC', { month: 'short', year: '2-digit' }),
-  ).reverse();
+  // Cronológico (YYYY-MM ascendente), últimos 12 meses con datos.
+  const meses = new Map<string, number>();
+  rows.forEach((r) => {
+    const d = new Date(r.first_seen_at);
+    const k = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    meses.set(k, (meses.get(k) ?? 0) + 1);
+  });
+  const porMes = [...meses.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .slice(-12)
+    .map(([k, cantidad]) => {
+      const [y, m] = k.split('-').map(Number);
+      // "oct ’26" (con apóstrofo para que no se lea como el día 26).
+      const mes = new Date(y, m - 1, 1).toLocaleDateString('es-EC', { month: 'short' }).replace('.', '');
+      return { label: `${mes} ’${String(y).slice(-2)}`, cantidad };
+    });
+
+  const bandOf = (s: number | null) => ((s ?? 0) >= 75 ? 'Caliente' : (s ?? 0) >= 50 ? 'Bueno' : (s ?? 0) >= 25 ? 'Tibio' : 'Frío');
+  const porBanda = ['Caliente', 'Bueno', 'Tibio', 'Frío'].map((label) => ({
+    label,
+    cantidad: rows.filter((r) => bandOf(r.score) === label).length,
+  }));
+  const distintos = (keyFn: (r: (typeof rows)[number]) => string | null | undefined) =>
+    new Set(rows.map(keyFn).filter(Boolean)).size;
 
   return {
     total: rows.length,
@@ -234,6 +259,9 @@ export async function getReportData(): Promise<ReportData> {
     porFuente: tally((r) => r.sources?.nombre),
     porStatus,
     porMes,
+    porBanda,
+    ciudadesDistintas: distintos((r) => r.ciudad),
+    rubrosDistintos: distintos((r) => r.categoria),
   };
 }
 

@@ -33,6 +33,16 @@ const RUBROS: { value: string; label: string }[] = [
 ];
 const RUBRO_LABEL = Object.fromEntries(RUBROS.map((r) => [r.value, r.label]));
 
+/** Una corrida 'corriendo' de hace más de 15 min se considera colgada: no se anima. */
+const STALE_RUN_MS = 15 * 60_000;
+function isRunning(j: SearchJob, localRunning: string | null): boolean {
+  if (localRunning === j.id) return true;
+  const u = j.ultimo;
+  if (u?.status !== 'corriendo') return false;
+  const started = u.started_at ? new Date(u.started_at).getTime() : Date.now();
+  return Date.now() - started < STALE_RUN_MS;
+}
+
 const emptyJob: JobInput = { nombre: '', source_id: null, query: '', ciudad: '', radio_metros: 15000, cron: '', activo: true, max_resultados: 60, categorias: [] };
 
 export default function Jobs() {
@@ -63,6 +73,8 @@ export default function Jobs() {
       setRunning(null);
     }
   }
+
+  const activeCount = (jobs ?? []).filter((j) => isRunning(j, running)).length;
 
   const selectedSource = sources.find((s) => s.id === editing?.source_id);
   const isGoogle = /google/i.test(selectedSource?.nombre ?? '');
@@ -104,7 +116,15 @@ export default function Jobs() {
       <PageHeader
         title="Búsquedas"
         description="Trabajos de ingesta programados y manuales."
-        actions={<Button size="sm" onClick={() => setEditing({ ...emptyJob })}><Plus className="h-4 w-4" /> Nueva búsqueda</Button>}
+        actions={<>
+          {activeCount > 0 && (
+            <span className="inline-flex h-8 items-center rounded-md border border-accent/40 bg-accent/10 px-3 text-xs font-medium text-accent-text">
+              <span className="pulse-dot" />
+              {activeCount === 1 ? '1 búsqueda activa' : `${activeCount} búsquedas activas`}
+            </span>
+          )}
+          <Button size="sm" onClick={() => setEditing({ ...emptyJob })}><Plus className="h-4 w-4" /> Nueva búsqueda</Button>
+        </>}
       />
 
       {isLoading ? (
@@ -124,10 +144,12 @@ export default function Jobs() {
             </TR>
           </THead>
           <TBody>
-            {(jobs ?? []).map((j) => (
-              <TR key={j.id}>
+            {(jobs ?? []).map((j) => {
+              const searching = isRunning(j, running);
+              return (
+              <TR key={j.id} className={searching ? 'row-searching' : ''}>
                 <TD>
-                  <div className="font-medium text-ink-primary">{j.nombre}</div>
+                  <div className={`font-medium text-ink-primary ${searching ? 'searching-name' : ''}`}>{j.nombre}</div>
                   <div className="text-xs text-ink-muted">
                     {j.categorias?.length
                       ? j.categorias.map((c) => RUBRO_LABEL[c] ?? c).join(', ')
@@ -142,11 +164,15 @@ export default function Jobs() {
                 <TD className="text-xs text-ink-secondary">
                   {j.ultimo ? `${j.ultimo.encontrados} enc · ${j.ultimo.nuevos} nuevos · ${timeAgo(j.last_run_at)}` : 'sin correr'}
                 </TD>
-                <TD>{j.ultimo ? <Badge variant={statusVariant[j.ultimo.status] ?? 'default'}>{j.ultimo.status}</Badge> : <Badge>{j.activo ? 'activa' : 'inactiva'}</Badge>}</TD>
+                <TD>
+                  {searching
+                    ? <Badge variant="primary"><span className="pulse-dot" />Buscando…</Badge>
+                    : j.ultimo ? <Badge variant={statusVariant[j.ultimo.status] ?? 'default'}>{j.ultimo.status}</Badge> : <Badge>{j.activo ? 'activa' : 'inactiva'}</Badge>}
+                </TD>
                 <TD>
                   <div className="flex items-center gap-1">
-                    <button title="Ejecutar ahora" disabled={running === j.id} onClick={() => runNow(j)} className="p-1 text-ink-muted hover:text-accent-text disabled:opacity-50">
-                      {running === j.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
+                    <button title="Ejecutar ahora" disabled={searching} onClick={() => runNow(j)} className="p-1 text-ink-muted hover:text-accent-text disabled:opacity-50">
+                      {searching ? <Loader2 className="h-4 w-4 animate-spin text-accent-text" /> : <Play className="h-4 w-4" />}
                     </button>
                     <Link to={`/busquedas/${j.id}/runs`} title="Historial" className="p-1 text-ink-muted hover:text-ink-primary"><History className="h-4 w-4" /></Link>
                     <button title="Editar" onClick={() => setEditing({ id: j.id, nombre: j.nombre, source_id: j.source_id, query: j.query, ciudad: j.ciudad ?? '', radio_metros: j.radio_metros ?? 15000, cron: j.cron ?? '', activo: j.activo, max_resultados: j.max_resultados ?? 60, categorias: j.categorias ?? [] })} className="p-1 text-ink-muted hover:text-ink-primary text-xs">✎</button>
@@ -154,7 +180,8 @@ export default function Jobs() {
                   </div>
                 </TD>
               </TR>
-            ))}
+              );
+            })}
           </TBody>
         </Table>
       )}

@@ -1,0 +1,22 @@
+# Config mínima del CLI de Supabase para KODA (no es un entorno local completo).
+# Aquí solo se fija verify_jwt por función, para que un `functions deploy` normal
+# NO lo vuelva a activar sin que nadie se dé cuenta.
+project_id = "keudcycnwjuneaclezjk"
+
+# Estas 4 las invoca pg_cron con la cabecera `x-cron-secret` (no con un JWT), así
+# que el gateway no puede verificar el JWT. La autenticación la hace SIEMPRE
+# `requireCaller` (_shared/supabaseAdmin.ts): secreto de cron o JWT de usuario activo.
+[functions.koda-normalizer]
+verify_jwt = false
+
+[functions.koda-scorer]
+verify_jwt = false
+
+[functions.koda-notifier]
+verify_jwt = false
+
+[functions.koda-digest]
+verify_jwt = false
+
+# koda-collector y koda-users solo las llama el panel con el JWT del usuario:
+# se quedan con verify_jwt = true (por defecto).

@@ -1,4 +1,11 @@
 -- ============================================================================
+-- ⛔ OBSOLETA — NO USAR. Reemplazada por 0007_cron_secret.sql (cron con secreto
+-- compartido en Vault, sin claves embebidas). Esta plantilla pedía pegar la
+-- service_role en `cron.job`; el gateway rechazaba ese Authorization (401) y el
+-- SUPABASE_SERVICE_ROLE_KEY de las funciones tampoco coincide con la clave legacy.
+-- Se conserva solo como historial.
+-- ============================================================================
+-- ============================================================================
 -- KODA · 0004_cron.sql  (PLANTILLA — reemplazá los <PLACEHOLDERS>)
 -- Programa el pipeline con pg_cron + pg_net (sección 7.6).
 --

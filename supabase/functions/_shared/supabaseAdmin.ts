@@ -28,19 +28,43 @@ export interface Caller {
   permisos: string[];
 }
 
+/** Comparación en tiempo constante (evita filtrar el secreto por tiempos de respuesta). */
+function safeEqual(a: string, b: string): boolean {
+  const ea = new TextEncoder().encode(a);
+  const eb = new TextEncoder().encode(b);
+  let diff = ea.length ^ eb.length;
+  for (let i = 0; i < Math.max(ea.length, eb.length); i++) diff |= (ea[i] ?? 0) ^ (eb[i] ?? 0);
+  return diff === 0;
+}
+
+const CRON_CALLER: Caller = { id: 'cron', isCron: true, isAdmin: true, rol: 'super_admin', permisos: [] };
+
 /**
  * Verifica que quien invoca la función esté autenticado Y activo (JWT de usuario)
- * o sea la propia service_role (pg_cron). Lanza si no.
+ * o sea el cron. Lanza si no.
+ *
+ * pg_cron NO usa la service_role: manda la cabecera `x-cron-secret` con el secreto
+ * compartido `CRON_SECRET` (Secrets de la función + Vault de la base; ver migración
+ * 0007). Por eso koda-normalizer / scorer / notifier / digest se despliegan con
+ * verify_jwt = false (ver supabase/config.toml): el gateway no puede validar esa
+ * llamada, así que SIEMPRE debe pasar por esta función antes de hacer nada.
  */
 export async function requireCaller(req: Request, admin: SupabaseClient): Promise<Caller> {
+  // ¿Llamada del cron? Si trae la cabecera y no coincide, se rechaza sin más.
+  const cronHeader = req.headers.get('x-cron-secret');
+  if (cronHeader !== null) {
+    const expected = Deno.env.get('CRON_SECRET');
+    if (!expected || !safeEqual(cronHeader, expected)) throw new Error('No autorizado: secreto de cron inválido.');
+    return CRON_CALLER;
+  }
+
   const auth = req.headers.get('Authorization') ?? '';
   const token = auth.replace(/^Bearer\s+/i, '');
   if (!token) throw new Error('No autorizado: falta el token.');
 
-  // Si el token es la service_role key, es una llamada de cron/servidor.
-  if (token === Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')) {
-    return { id: 'cron', isCron: true, isAdmin: true, rol: 'super_admin', permisos: [] };
-  }
+  // Llamada de servidor con la propia service_role key (p. ej. pruebas por curl).
+  const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+  if (serviceKey && safeEqual(token, serviceKey)) return CRON_CALLER;
 
   const { data, error } = await admin.auth.getUser(token);
   if (error || !data.user) throw new Error('No autorizado: token inválido.');

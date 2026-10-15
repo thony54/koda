@@ -56,6 +56,7 @@ supabase secrets set --env-file supabase/.env.functions
 
 Mínimo para OSM (gratis): `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`.
 Para Google Places (pago): agregá `GOOGLE_PLACES_API_KEY` y `COSTO_MAX_MENSUAL_USD`.
+Para el cron: `CRON_SECRET` (ver "Programar (pg_cron)" más abajo).
 Para Discord (Fase 3): un webhook por canal —
 `DISCORD_WEBHOOK_HOT`, `DISCORD_WEBHOOK_NUEVOS`, `DISCORD_WEBHOOK_REPORTES`,
 `DISCORD_WEBHOOK_ERRORES` (o `DISCORD_WEBHOOK_DEFAULT` como respaldo para todos).
@@ -95,11 +96,39 @@ supabase functions deploy koda-users      # Multiusuario
 
 ## Programar (pg_cron)
 
-Ejecutá `supabase/migrations/0004_cron.sql` en el SQL Editor reemplazando
-`<PROJECT_REF>` y `<SERVICE_ROLE_KEY>`. Agenda el normalizer y el scorer cada
-10 min. **Fase 3:** descomentá los bloques `koda-notifier` (cada minuto) y
-`koda-digest` (diario 12:00 UTC = 07:00 Guayaquil). Los jobs con `cron` propio se
-agendan aparte al crearlos. La retención se agenda sola desde `0005`.
+Los 4 cron (normalizer y scorer cada 10 min, notifier cada minuto, digest 12:00 UTC =
+07:00 Guayaquil) los agenda `supabase/migrations/0007_cron_secret.sql`. **No uses
+`0004_cron.sql`**: está obsoleta (embebía una clave en `cron.job`; el gateway la
+rechazaba con 401 `UNAUTHORIZED_INVALID_JWT_FORMAT`).
+
+Cómo funciona ahora:
+
+```
+pg_cron → public.koda_cron_call('koda-…') → POST con cabecera x-cron-secret → Edge Function
+            (lee `cron_secret` de Vault)                                        └ requireCaller lo compara con CRON_SECRET
+```
+
+- Esas 4 funciones se despliegan con `verify_jwt = false` (está en
+  `supabase/config.toml`, así un `functions deploy` normal no lo revierte): el cron
+  no manda un JWT. **La autenticación la hace siempre `requireCaller`** — secreto de
+  cron válido, o JWT de un usuario activo. No llames a `req.json()` ni hagas nada
+  antes de `requireCaller` en esas funciones.
+- `koda-collector` y `koda-users` siguen con `verify_jwt = true` (solo las llama el panel).
+- El secreto nunca está en el repo ni en `cron.job`. Se crea una sola vez, a mano:
+
+  ```bash
+  openssl rand -hex 32                                   # genera el valor
+  supabase secrets set CRON_SECRET=<valor>               # Edge Functions
+  # y en la base (misma cadena), con `supabase db query --linked`:
+  #   select vault.create_secret('<valor>', 'cron_secret', 'Secreto compartido pg_cron -> Edge Functions KODA');
+  ```
+
+  Para rotarlo: `vault.update_secret(<id>, '<nuevo>')` y `secrets set` con el mismo valor.
+- Aplicar migraciones con `npx supabase db query --linked -f <archivo>` (nunca `db push`).
+- Ver respuestas: `select status_code, content, created from net._http_response order by created desc limit 20;`
+  y ejecuciones: `select * from cron.job_run_details order by start_time desc limit 20;`.
+
+La retención se agenda sola desde `0005`.
 
 ## Probar
 

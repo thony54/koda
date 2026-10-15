@@ -5,9 +5,9 @@ import { useAuth } from '@/hooks/useAuth';
 import { Button, Input } from '@/components/ui';
 
 const PILLARS = [
-  { icon: Radar, title: 'Detección', text: 'Encuentra negocios sin presencia digital en tus ciudades objetivo.' },
-  { icon: Gauge, title: 'KODA Score', text: 'Cada prospecto con un puntaje explicable, nunca una caja negra.' },
-  { icon: ShieldCheck, title: 'Control', text: 'Datos aislados por usuario y auditoría de cada cambio.' },
+  { icon: Radar, title: 'Detecta', text: 'Busca negocios y profesionales por ciudad y rubro en mapas abiertos, Google Places o tus propios archivos.' },
+  { icon: Gauge, title: 'Prioriza', text: 'Cada prospecto recibe un KODA Score que puedes explicar: ves por qué es caliente o frío.' },
+  { icon: ShieldCheck, title: 'Da seguimiento', text: 'Estados, notas, mapa y avisos a Discord para que ningún contacto se enfríe.' },
 ];
 
 export default function Login() {
@@ -57,7 +57,7 @@ export default function Login() {
         <div className="relative flex items-center gap-3">
           <span className="font-heading text-lg font-semibold tracking-[0.25em] text-ink-primary">KODA</span>
           <span className="h-4 w-px bg-line-strong" />
-          <span className="eyebrow">Connexo</span>
+          <span className="eyebrow">Motor de prospección</span>
         </div>
 
         <div className="relative flex flex-col items-center text-center">
@@ -67,11 +67,13 @@ export default function Login() {
             className="h-56 w-56 select-none object-contain [filter:drop-shadow(0_0_36px_rgb(var(--c-accent)/0.35))]"
             draggable={false}
           />
-          <h2 className="mt-8 font-heading text-[34px] font-semibold leading-tight text-ink-primary">
-            Prospección con criterio.
+          <h2 className="mt-8 max-w-md text-balance font-heading text-[34px] font-semibold leading-tight text-ink-primary">
+            Tus próximos clientes, ya identificados.
           </h2>
-          <p className="mt-3 max-w-md text-[15px] text-ink-secondary">
-            El motor que encuentra, puntúa y prioriza a los clientes de Connexo antes de que lo haga la competencia.
+          <p className="mt-4 max-w-md text-balance text-[15px] leading-relaxed text-ink-secondary">
+            KODA rastrea negocios y profesionales en las ciudades que elijas, los califica con un
+            puntaje claro y te muestra a quién contactar primero. Menos búsqueda manual, más
+            conversaciones que valen la pena.
           </p>
         </div>
 
@@ -87,7 +89,8 @@ export default function Login() {
       </aside>
 
       {/* Formulario */}
-      <main className="relative grid place-items-center px-5 py-12">
+      <main className="relative flex min-h-screen flex-col px-5">
+        <div className="grid flex-1 place-items-center py-12">
         <div className="w-full max-w-[380px]">
           {/* Marca compacta (móvil) */}
           <div className="mb-8 flex flex-col items-center text-center lg:hidden">
@@ -98,17 +101,17 @@ export default function Login() {
               draggable={false}
             />
             <p className="mt-3 font-heading text-xl font-semibold tracking-[0.25em] text-ink-primary">KODA</p>
+            <p className="mt-2 max-w-[280px] text-balance text-xs leading-relaxed text-ink-muted">
+              Encuentra, puntúa y prioriza a tus próximos clientes.
+            </p>
           </div>
 
           <p className="eyebrow mb-2 hidden text-accent-text/80 lg:block">Acceso</p>
           <h1 className="font-heading text-[28px] font-semibold leading-tight text-ink-primary">
             Inicia sesión
           </h1>
-          <p className="mt-1.5 text-sm text-ink-secondary">
-            Usa la cuenta que te habilitó un Super Admin.
-          </p>
 
-          <form onSubmit={onSubmit} className="glass-panel panel-ember mt-7 space-y-4 rounded-lg p-6">
+          <form onSubmit={onSubmit} className="glass-panel panel-ember mt-6 space-y-4 rounded-lg p-6">
             <Input
               id="email"
               type="email"
@@ -118,7 +121,7 @@ export default function Login() {
               icon={<Mail className="h-4 w-4" />}
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="tu@connexoapp.com"
+              placeholder="tu@correo.com"
             />
             <Input
               id="password"
@@ -150,10 +153,16 @@ export default function Login() {
             )}
           </form>
 
-          <p className="mt-5 text-center text-xs text-ink-muted">
-            No hay registro público. El acceso lo gestiona el Super Admin.
-          </p>
         </div>
+        </div>
+
+        {/* Crédito */}
+        <footer className="flex items-center justify-center gap-2 pb-6 pt-2 text-[11px] text-ink-muted">
+          <span className="h-px w-6 bg-line-strong" aria-hidden />
+          <span>Creado por</span>
+          <span className="font-heading font-semibold uppercase tracking-[0.16em] text-ink-secondary">Quantum Code</span>
+          <span className="h-px w-6 bg-line-strong" aria-hidden />
+        </footer>
       </main>
     </div>
   );

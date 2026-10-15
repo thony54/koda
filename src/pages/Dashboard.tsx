@@ -35,7 +35,7 @@ export default function Dashboard() {
       <PageHeader
         eyebrow="Panel · Resumen"
         title={`Hola, ${nombre}`}
-        description={isOwner ? 'Resumen del embudo de prospección de Connexo.' : 'Resumen de tu prospección.'}
+        description={isOwner ? 'Resumen del embudo de prospección.' : 'Resumen de tu prospección.'}
       />
 
       {sinEspacio && (

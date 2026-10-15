@@ -99,7 +99,7 @@ export default function Prospects() {
       <PageHeader
         eyebrow="Base de datos"
         title="Prospectos"
-        description="La base de prospectos calificados de Connexo."
+        description="La base de prospectos calificados."
         actions={
           canExport ? (
             <Button variant="secondary" size="sm" onClick={() => exportCSV(rows, isOwner)}>

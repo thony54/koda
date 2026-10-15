@@ -48,7 +48,7 @@ export function Sidebar() {
               <p className="font-heading text-[17px] font-semibold tracking-[0.2em] text-ink-primary">
                 KODA
               </p>
-              <p className="eyebrow mt-1.5 !text-[9px] !tracking-[0.22em]">Connexo</p>
+              <p className="eyebrow mt-1.5 !text-[9px] !tracking-[0.22em]">Prospección</p>
             </div>
           </div>
           <button

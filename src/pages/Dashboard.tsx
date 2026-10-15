@@ -10,7 +10,9 @@ import { PageHeader } from '@/components/layout/PageHeader';
 import { ScoreBadge } from '@/components/prospects/ScoreBadge';
 import { useAuth } from '@/hooks/useAuth';
 import { useDashboard } from '@/hooks/useDashboard';
-import { useMiEspacio } from '@/hooks/useEspacio';
+import { useMiEspacio, useMiResumen } from '@/hooks/useEspacio';
+import { ParaTi } from '@/components/dashboard/ParaTi';
+import { useScopeStore } from '@/store/scopeStore';
 import { formatUSD } from '@/lib/format';
 import { CHART_ACCENT, axisTick, gridStroke, tooltipProps } from '@/lib/chartTheme';
 
@@ -25,6 +27,11 @@ export default function Dashboard() {
   const { profile, isOwner } = useAuth();
   const { data, isLoading } = useDashboard();
   const { data: espacio, isSuccess: espacioListo } = useMiEspacio();
+  const { data: resumen } = useMiResumen();
+  const scopeOwner = useScopeStore((s) => s.ownerId);
+  // "Para ti" es personal: se muestra al ver tus propios datos (el propietario mirando a otro usuario no lo ve).
+  const verParaTi = !isOwner || scopeOwner === profile?.id;
+  const aprendidas = resumen?.decisiones ?? 0;
   const nombre = profile?.nombre?.split(' ')[0] || 'de nuevo';
   // Un usuario que aún no le contó a KODA qué busca recibe los puntajes generales.
   const sinEspacio = espacioListo && !espacio?.negocio && !espacio?.rubros.length
@@ -35,7 +42,8 @@ export default function Dashboard() {
       <PageHeader
         eyebrow="Panel · Resumen"
         title={`Hola, ${nombre}`}
-        description={isOwner ? 'Resumen del embudo de prospección.' : 'Resumen de tu prospección.'}
+        description={`${isOwner ? 'Resumen del embudo de prospección.' : 'Resumen de tu prospección.'}${
+          verParaTi && aprendidas > 0 ? ` KODA ya aprendió de ${aprendidas} decisiones tuyas y ordena todo con ellas.` : ''}`}
       />
 
       {sinEspacio && (
@@ -54,6 +62,8 @@ export default function Dashboard() {
           </Card>
         </Link>
       )}
+
+      <ParaTi enabled={verParaTi} />
 
       {isLoading || !data ? (
         <div className="grid place-items-center py-24 text-ink-muted">

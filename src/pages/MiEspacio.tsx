@@ -1,16 +1,19 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Brain, Loader2, RotateCcw, Save, Sparkles, Trash2 } from 'lucide-react';
+import { Brain, Loader2, Plus, RotateCcw, Save, Sparkles, ThumbsDown, ThumbsUp, Trash2 } from 'lucide-react';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Badge, Button, Card, Switch, TagInput, Textarea } from '@/components/ui';
-import { TIPO_LABEL } from '@/components/prospects/Filters';
 import { useScoringRules } from '@/hooks/useAdmin';
 import {
-  useEspacioMutations, useMiEspacio, useMiMemoria, useMiResumen,
+  useEspacioMutations, useMiEspacio, useMiMemoria, useMiRecientes, useMiResumen,
 } from '@/hooks/useEspacio';
+import { useJobs } from '@/hooks/useJobs';
 import { ESPACIO_VACIO, type EspacioInput } from '@/lib/data/espacio';
-import { RUBROS } from '@/lib/rubros';
+import { RUBROS, RUBRO_LABEL } from '@/lib/rubros';
+import { etiquetaMemoria } from '@/lib/aprendizaje';
+import { timeAgo } from '@/lib/format';
+import type { Reciente } from '@/lib/data/kodaVivo';
 import { useUIStore } from '@/store/uiStore';
-import type { KodaMemoria, KodaPerfil, ProspectType } from '@/types/database';
+import type { KodaMemoria, KodaPerfil } from '@/types/database';
 
 // Reglas de seguridad: no se muestran ni se pueden reescribir.
 const PROTEGIDAS = new Set(['opt_out', 'ya_es_cliente', 'cerrado_permanente']);
@@ -34,22 +37,6 @@ const GRUPOS_SENALES: { titulo: string; ayuda: string; claves: string[] }[] = [
     claves: ['resenas_10_plus', 'rating_4_plus', 'contacto_directo', 'sin_ningun_contacto'],
   },
 ];
-
-/** Texto legible de una característica que KODA recuerda. */
-function etiquetaMemoria(feature: string, reglas: Map<string, string>): string {
-  const i = feature.indexOf(':');
-  const pre = feature.slice(0, i);
-  const val = feature.slice(i + 1);
-  const bonito = val.replace(/_/g, ' ');
-  switch (pre) {
-    case 'cat': return `Rubro: ${bonito}`;
-    case 'ciudad': return `Ciudad: ${bonito.replace(/\b\w/g, (c) => c.toUpperCase())}`;
-    case 'tipo': return `Tipo: ${TIPO_LABEL[val as ProspectType] ?? bonito}`;
-    case 'sig': return reglas.get(val) ?? bonito;
-    case 'tok': return `Nombre con «${val}»`;
-    default: return feature;
-  }
-}
 
 function sameSpace(a: EspacioInput, b: EspacioInput): boolean {
   return JSON.stringify(a) === JSON.stringify(b);
@@ -75,6 +62,8 @@ export default function MiEspacio() {
   const { data: reglas } = useScoringRules();
   const { data: memoria } = useMiMemoria();
   const { data: resumen } = useMiResumen();
+  const { data: recientes } = useMiRecientes();
+  const { data: jobs } = useJobs();
   const { guardar, olvidar, recalcular } = useEspacioMutations();
 
   const base = useMemo<EspacioInput>(() => perfilToInput(perfil), [perfil]);
@@ -104,6 +93,20 @@ export default function MiEspacio() {
       ...(otras.length ? [{ titulo: 'Otras señales', ayuda: 'Reglas adicionales de la cuenta.', claves: otras }] : []),
     ].filter((g) => g.claves.length);
   }, [reglaPorClave]);
+
+  // Lo que el usuario ya busca (sus búsquedas activas) y todavía no está en su espacio.
+  const sugeridos = useMemo(() => {
+    const rub = new Set<string>();
+    const ciu = new Map<string, string>();
+    (jobs ?? []).filter((j) => j.activo).forEach((j) => {
+      (j.categorias ?? []).forEach((c) => { if (RUBRO_LABEL[c]) rub.add(c); });
+      if (j.ciudad?.trim()) ciu.set(j.ciudad.trim().toLowerCase(), j.ciudad.trim());
+    });
+    return {
+      rubros: [...rub].filter((r) => !draft.rubros.includes(r)),
+      ciudades: [...ciu.entries()].filter(([k]) => !draft.ciudades.some((x) => x.toLowerCase() === k)).map(([, v]) => v),
+    };
+  }, [jobs, draft.rubros, draft.ciudades]);
 
   function setPeso(clave: string, valor: number, porDefecto: number) {
     const pesos = { ...draft.pesos };
@@ -203,6 +206,41 @@ export default function MiEspacio() {
 
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
         <div className="space-y-5 lg:col-span-2">
+          {/* KODA notó lo que ya buscas */}
+          {(sugeridos.rubros.length > 0 || sugeridos.ciudades.length > 0) && (
+            <Card ember>
+              <div className="flex items-center gap-2">
+                <Sparkles className="h-4 w-4 text-accent-text" />
+                <h2 className="card-title">KODA notó lo que buscas</h2>
+              </div>
+              <p className="mb-3 mt-1 text-xs text-ink-muted">
+                Por tus búsquedas activas creo que te interesa esto. Tócalo para sumarlo a tu espacio (luego guarda).
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                {sugeridos.rubros.map((r) => (
+                  <button
+                    key={`r-${r}`}
+                    type="button"
+                    onClick={() => set('rubros', [...draft.rubros, r])}
+                    className="inline-flex items-center gap-1 rounded-full border border-dashed border-accent/50 px-3 py-1 text-xs text-accent-text transition-colors hover:bg-accent/10"
+                  >
+                    <Plus className="h-3 w-3" /> {RUBRO_LABEL[r]}
+                  </button>
+                ))}
+                {sugeridos.ciudades.map((c) => (
+                  <button
+                    key={`c-${c}`}
+                    type="button"
+                    onClick={() => set('ciudades', [...draft.ciudades, c])}
+                    className="inline-flex items-center gap-1 rounded-full border border-dashed border-accent/50 px-3 py-1 text-xs text-accent-text transition-colors hover:bg-accent/10"
+                  >
+                    <Plus className="h-3 w-3" /> {c}
+                  </button>
+                ))}
+              </div>
+            </Card>
+          )}
+
           {/* Negocio */}
           <Card>
             <h2 className="card-title">Tu negocio</h2>
@@ -383,6 +421,15 @@ export default function MiEspacio() {
             )}
           </Card>
 
+          {(recientes?.length ?? 0) > 0 && (
+            <Card>
+              <h3 className="text-sm font-medium text-ink-primary">Lo último que aprendí</h3>
+              <ul className="mt-3 space-y-2.5">
+                {recientes!.map((r) => <ItemReciente key={r.id} r={r} />)}
+              </ul>
+            </Card>
+          )}
+
           <Card>
             <div className="flex items-start justify-between gap-4">
               <div>
@@ -406,6 +453,26 @@ export default function MiEspacio() {
         </div>
       </div>
     </div>
+  );
+}
+
+function ItemReciente({ r }: { r: Reciente }) {
+  const favor = r.aplicado > 0;
+  const motivo = r.explicito != null
+    ? (r.explicito > 0 ? 'Lo marcaste como tu tipo' : 'Dijiste que no es para ti')
+    : r.por_estado !== 0
+      ? (r.por_estado > 0 ? 'Por el avance que le diste' : 'Lo descartaste')
+      : 'Por lo que hiciste con él (enlaces, asignación)';
+  return (
+    <li className="flex items-start gap-2.5">
+      <span className={`mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-full ${favor ? 'bg-success/15 text-success' : 'bg-danger/15 text-danger'}`}>
+        {favor ? <ThumbsUp className="h-3 w-3" /> : <ThumbsDown className="h-3 w-3" />}
+      </span>
+      <div className="min-w-0">
+        <p className="truncate text-sm text-ink-secondary">{r.nombre ?? 'Prospecto'}</p>
+        <p className="text-[11px] text-ink-muted">{motivo} · {timeAgo(r.updated_at)}</p>
+      </div>
+    </li>
   );
 }
 

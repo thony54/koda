@@ -8,10 +8,12 @@ import { ScoreBreakdown } from '@/components/prospects/ScoreBreakdown';
 import { TIPO_LABEL, STATUS_LABEL } from '@/components/prospects/Filters';
 import { useProspect, useUpdateProspect } from '@/hooks/useProspects';
 import { useAuth } from '@/hooks/useAuth';
-import { useMarcarProspecto, useMiEspacio, useVeredicto } from '@/hooks/useEspacio';
+import { useAvisoAprendizaje, useMarcarProspecto, useMiEspacio, useVeredicto } from '@/hooks/useEspacio';
 import { useUIStore } from '@/store/uiStore';
 import { formatPhoneEC, formatDateTime, timeAgo } from '@/lib/format';
-import type { ProspectStatus } from '@/types/domain';
+import { lineaAprendida, razonesDeEncaje } from '@/lib/aprendizaje';
+import { registrarContacto } from '@/lib/data/kodaVivo';
+import type { ProspectStatus, ScoreLine } from '@/types/domain';
 
 const VENDEDORES = ['Ana Torres', 'Luis Paredes', 'María Chávez'];
 
@@ -21,6 +23,7 @@ export default function ProspectDetail() {
   const update = useUpdateProspect();
   const toast = useUIStore((s) => s.toast);
   const { profile, isOwner } = useAuth();
+  const avisar = useAvisoAprendizaje();
 
   if (isLoading) {
     return (
@@ -44,15 +47,25 @@ export default function ProspectDetail() {
   const changeStatus = async (status: ProspectStatus) => {
     await update.mutateAsync({ id: p.id, patch: { status } });
     toast(`Estado → ${STATUS_LABEL[status]}`, 'success');
+    void avisar();
   };
   const assign = async (vendedor: string) => {
     await update.mutateAsync({ id: p.id, patch: { assigned_to: vendedor || undefined } });
     toast(vendedor ? `Asignado a ${vendedor}` : 'Asignación quitada', 'success');
+    if (vendedor) void avisar();
   };
   const verify = async () => {
     await update.mutateAsync({ id: p.id, patch: { verified_at: new Date().toISOString() } });
     toast('Datos verificados', 'success');
+    void avisar();
   };
+  // Abrir un enlace del prospecto es interés real: KODA lo anota (solo con prospectos propios).
+  const esMio = Boolean(profile && p.owner_id === profile.id);
+  const interes = () => { if (esMio) registrarContacto(p.id); };
+  // wa.me pide el número con código de país: lo normal ya viene en E.164; un `09…` local se completa.
+  const waDigitos = p.whatsapp ? p.whatsapp.replace(/\D/g, '') : '';
+  const wa = waDigitos.startsWith('0') ? `593${waDigitos.slice(1)}` : waDigitos;
+
   const noContactar = async () => {
     await update.mutateAsync({ id: p.id, patch: { status: 'no_contactar', opt_out: true } });
     toast('Marcado como no contactar', 'warning');
@@ -90,6 +103,7 @@ export default function ProspectDetail() {
         {/* Columna principal */}
         <div className="lg:col-span-2 space-y-5">
           <Card ember>
+            <PorQueKoda lines={p.score_desglose} />
             <ScoreBreakdown score={p.score} lines={p.score_desglose} />
           </Card>
 
@@ -105,9 +119,10 @@ export default function ProspectDetail() {
               <Stat label="Fuente" value={p.source_nombre ?? '—'} />
             </div>
             <div className="mt-4 flex flex-wrap gap-2">
-              {p.website && <LinkPill icon={<Globe className="h-3.5 w-3.5" />} href={p.website} label="Web" />}
-              {p.instagram && <LinkPill icon={<Instagram className="h-3.5 w-3.5" />} href={`https://instagram.com/${p.instagram}`} label="Instagram" />}
-              {p.google_maps_url && <LinkPill icon={<MapPin className="h-3.5 w-3.5" />} href={p.google_maps_url} label="Maps" />}
+              {wa && <LinkPill icon={<MessageCircle className="h-3.5 w-3.5" />} href={`https://wa.me/${wa}`} label="WhatsApp" onOpen={interes} />}
+              {p.website && <LinkPill icon={<Globe className="h-3.5 w-3.5" />} href={p.website} label="Web" onOpen={interes} />}
+              {p.instagram && <LinkPill icon={<Instagram className="h-3.5 w-3.5" />} href={`https://instagram.com/${p.instagram}`} label="Instagram" onOpen={interes} />}
+              {p.google_maps_url && <LinkPill icon={<MapPin className="h-3.5 w-3.5" />} href={p.google_maps_url} label="Maps" onOpen={interes} />}
             </div>
           </Card>
 
@@ -229,12 +244,37 @@ export default function ProspectDetail() {
   );
 }
 
+/** Por qué KODA recomienda este prospecto, dicho como lo diría alguien que te conoce. */
+function PorQueKoda({ lines }: { lines: ScoreLine[] }) {
+  const razones = razonesDeEncaje(lines);
+  const aprendida = lineaAprendida(lines);
+  if (!razones.length && !aprendida) return null;
+  return (
+    <div className="mb-6 rounded-md border border-accent/20 bg-accent/[0.06] px-4 py-3">
+      <p className="flex items-center gap-2 text-[13px] font-medium text-accent-text">
+        <Brain className="h-4 w-4" /> Por qué te lo muestro así
+      </p>
+      {razones.length > 0 && (
+        <p className="mt-1.5 text-sm text-ink-secondary">
+          Suma contigo porque {razones.join(' · ')}.
+        </p>
+      )}
+      {aprendida && (
+        <p className={`mt-1 text-sm ${aprendida.puntos > 0 ? 'text-success' : 'text-danger'}`}>
+          {aprendida.descripcion} ({aprendida.puntos > 0 ? '+' : ''}{aprendida.puntos})
+        </p>
+      )}
+    </div>
+  );
+}
+
 /** 👍 / 👎: la forma más directa de decirle a KODA qué tipo de cliente buscas. */
 function EnsenaAKoda({ prospectId }: { prospectId: string }) {
   const toast = useUIStore((s) => s.toast);
   const { data: espacio } = useMiEspacio();
   const { data: veredicto } = useVeredicto(prospectId);
   const marcar = useMarcarProspecto();
+  const avisar = useAvisoAprendizaje();
   const aprende = espacio?.aprende !== false;
   const actual = veredicto?.explicito ?? null;
 
@@ -248,6 +288,7 @@ function EnsenaAKoda({ prospectId }: { prospectId: string }) {
           : 'Quitaste tu marca.',
         nuevo === -3 ? 'warning' : 'success',
       );
+      if (nuevo !== 0) void avisar();
     } catch (e) {
       toast(e instanceof Error ? e.message : 'No se pudo guardar', 'error');
     }
@@ -300,12 +341,13 @@ function Stat({ label, value, accent }: { label: string; value: string; accent?:
   );
 }
 
-function LinkPill({ icon, href, label }: { icon: React.ReactNode; href: string; label: string }) {
+function LinkPill({ icon, href, label, onOpen }: { icon: React.ReactNode; href: string; label: string; onOpen?: () => void }) {
   return (
     <a
       href={href}
       target="_blank"
       rel="noreferrer"
+      onClick={onOpen}
       className="inline-flex items-center gap-1.5 rounded-md border border-line-strong bg-surface-inset px-2.5 py-1.5 text-xs text-ink-secondary transition-colors hover:border-accent/45 hover:text-ink-primary"
     >
       {icon}{label}<ExternalLink className="h-3 w-3 opacity-60" />

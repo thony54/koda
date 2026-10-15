@@ -43,7 +43,10 @@ export function useUpdateProspect() {
       // Cambiar el estado enseña a KODA (trigger en la base): refresca lo que recuerda.
       qc.invalidateQueries({ queryKey: ['mi-memoria'] });
       qc.invalidateQueries({ queryKey: ['mi-resumen'] });
+      qc.invalidateQueries({ queryKey: ['mi-recientes'] });
+      qc.invalidateQueries({ queryKey: ['para-ti'] });
       qc.invalidateQueries({ queryKey: ['veredicto'] });
+      qc.invalidateQueries({ queryKey: ['koda-pendientes'] });   // despierta al pulso: recalifica ya
       if (updated) qc.setQueryData(['prospect', updated.id], updated);
     },
   });

@@ -44,8 +44,10 @@ const PROTEGIDAS = ['opt_out', 'ya_es_cliente', 'cerrado_permanente'];
 export const CLAVE_APRENDIZAJE = 'aprendizaje_koda';
 export const APRENDIZAJE_MAX = 25;
 /** Decisiones necesarias para que KODA confíe del todo en lo aprendido. */
-const DECISIONES_CONFIANZA = 8;
+const DECISIONES_CONFIANZA = 5;
 const DECISIONES_MINIMAS = 2;
+/** Cuántas características cuentan en el promedio. Lo que KODA aún no conoce cuenta como neutro (0). */
+const CARACTERISTICAS_CLAVE = 6;
 
 function senalesDeNicho(p: ProspectLite, perfil: Perfil): string[] {
   const out: string[] = [];
@@ -85,7 +87,9 @@ function etiqueta(feature: string, reglas: Map<string, Rule>): string {
  * Ajuste aprendido. Para cada característica del prospecto que KODA ya conoce calcula
  * qué tan "sí" o "no" ha sido para el usuario (con suavizado: una sola decisión pesa
  * poco), le resta la mitad del humor general del usuario (si acepta casi todo, aceptar
- * no distingue nada) y promedia las 6 más claras. La confianza crece con las decisiones.
+ * no distingue nada) y promedia las 6 más claras; lo que KODA aún no conoce de ese
+ * prospecto cuenta como neutro, así un prospecto casi desconocido pesa menos que uno que
+ * se parece de verdad a lo ya decidido. La confianza crece con las decisiones.
  */
 function aprendizaje(
   features: string[],
@@ -106,8 +110,8 @@ function aprendizaje(
   if (!vistas.length) return null;
 
   vistas.sort((a, b) => Math.abs(b.net) - Math.abs(a.net));
-  const top = vistas.slice(0, 6);
-  const media = top.reduce((a, x) => a + x.net, 0) / top.length;
+  const top = vistas.slice(0, CARACTERISTICAS_CLAVE);
+  const media = top.reduce((a, x) => a + x.net, 0) / CARACTERISTICAS_CLAVE;
   const confianza = Math.min(1, mem.decisiones / DECISIONES_CONFIANZA);
   const puntos = Math.round(APRENDIZAJE_MAX * Math.max(-1, Math.min(1, media)) * confianza);
   if (puntos === 0) return null;

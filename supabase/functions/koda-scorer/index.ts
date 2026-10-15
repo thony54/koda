@@ -14,7 +14,7 @@
 import { corsHeaders, json } from '../_shared/cors.ts';
 import { getAdminClient, requireCaller } from '../_shared/supabaseAdmin.ts';
 import { createOwnerCache } from '../_shared/owners.ts';
-import { computeScore, type Memoria, type Perfil, type Rule } from '../_shared/scoring.ts';
+import { computeScore, type Memoria, type Perfil, type Rule, type ScoreLine } from '../_shared/scoring.ts';
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2';
 
 const PRESUPUESTO_MS = 40_000;
@@ -27,6 +27,7 @@ interface Fila {
   owner_id: string;
   score: number | null;
   plan_sugerido: string | null;
+  score_desglose?: unknown;
   nombre: string;
   categoria: string | null;
   descripcion: string | null;
@@ -39,6 +40,13 @@ interface Contexto {
   version: number;
   perfil: Perfil | null;
   memoria: Memoria | null;
+}
+
+/** ¿El desglose guardado es idéntico al recién calculado? (el jsonb no conserva el orden de las claves.) */
+function mismoDesglose(guardado: unknown, nuevo: ScoreLine[]): boolean {
+  if (!Array.isArray(guardado) || guardado.length !== nuevo.length) return false;
+  return guardado.every((l, i) =>
+    l?.clave === nuevo[i].clave && l?.puntos === nuevo[i].puntos && l?.descripcion === nuevo[i].descripcion);
 }
 
 /** Lee todas las filas de una consulta paginada (PostgREST limita a 1000 por petición). */
@@ -133,7 +141,7 @@ Deno.serve(async (req) => {
       let lote: Fila[];
       if (all) {
         let q = admin.from('prospects')
-          .select('id, owner_id, score, plan_sugerido, nombre, categoria, descripcion, ciudad')
+          .select('id, owner_id, score, plan_sugerido, score_desglose, nombre, categoria, descripcion, ciudad')
           .gt('id', despues).order('id').limit(LOTE);
         if (soloDe) q = q.eq('owner_id', soloDe);
         const { data, error } = await q;
@@ -166,6 +174,10 @@ Deno.serve(async (req) => {
         ((feats ?? []) as { prospect_id: string; features: string[] }[]).forEach((x) => caracteristicas.set(x.prospect_id, x.features));
       }
 
+      // Los que no cambiaron solo avanzan de versión (un único UPDATE por versión): así
+      // recalificar tras cada decisión del usuario no reescribe cientos de filas en vano.
+      const sinCambio = new Map<number, string[]>();
+
       for (let i = 0; i < lote.length; i += PARALELO) {
         await Promise.all(lote.slice(i, i + PARALELO).map(async (p) => {
           const ctx = ctxs.get(p.owner_id)!;
@@ -178,6 +190,13 @@ Deno.serve(async (req) => {
             features: caracteristicas.get(p.id) ?? [],
             esPropietario: ctx.esPropietario,
           });
+
+          if (p.score === score && (p.plan_sugerido ?? null) === plan && mismoDesglose(p.score_desglose, desglose)) {
+            const ids = sinCambio.get(ctx.version) ?? [];
+            ids.push(p.id); sinCambio.set(ctx.version, ids);
+            return;
+          }
+
           const { error: uErr } = await admin.from('prospects')
             .update({ score, score_desglose: desglose, plan_sugerido: plan, score_version: ctx.version })
             .eq('id', p.id);
@@ -195,6 +214,12 @@ Deno.serve(async (req) => {
             }
           }
         }));
+      }
+
+      for (const [version, ids] of sinCambio) {
+        const { error: vErr } = await admin.from('prospects').update({ score_version: version }).in('id', ids);
+        if (vErr) console.error('[scorer] no se pudo avanzar la versión', vErr.message);
+        else calificados += ids.length;
       }
 
       if (lote.length < LOTE && all) break;

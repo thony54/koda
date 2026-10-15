@@ -2,6 +2,7 @@ import { Menu, Moon, Sun } from 'lucide-react';
 import { useLocation } from 'react-router-dom';
 import { useUIStore } from '@/store/uiStore';
 import { ScopeSwitcher } from './ScopeSwitcher';
+import { KodaPulse } from './KodaPulse';
 import { navGroups } from './nav';
 
 /** Etiqueta de la sección actual a partir del menú (la ruta más específica gana). */
@@ -42,6 +43,7 @@ export function Topbar() {
       </div>
 
       <div className="ml-auto flex shrink-0 items-center gap-1.5 sm:gap-2">
+        <KodaPulse />
         <ScopeSwitcher />
         <button
           onClick={toggleTheme}

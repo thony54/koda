@@ -22,6 +22,7 @@ function asScoreLines(json: unknown): ScoreLine[] {
 export function rowToProspect(row: JoinedRow): Prospect {
   return {
     id: row.id,
+    owner_id: row.owner_id,
     nombre: row.nombre,
     tipo: row.tipo,
     categoria: row.categoria ?? undefined,

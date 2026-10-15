@@ -40,6 +40,10 @@ export function useUpdateProspect() {
     onSuccess: (updated: Prospect | null) => {
       qc.invalidateQueries({ queryKey: ['prospects'] });
       qc.invalidateQueries({ queryKey: ['dashboard'] });
+      // Cambiar el estado enseña a KODA (trigger en la base): refresca lo que recuerda.
+      qc.invalidateQueries({ queryKey: ['mi-memoria'] });
+      qc.invalidateQueries({ queryKey: ['mi-resumen'] });
+      qc.invalidateQueries({ queryKey: ['veredicto'] });
       if (updated) qc.setQueryData(['prospect', updated.id], updated);
     },
   });

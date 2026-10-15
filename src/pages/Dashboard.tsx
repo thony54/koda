@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom';
 import {
-  Users, Flame, TrendingUp, DollarSign, CheckCircle2, Loader2, ChevronRight,
+  Users, Flame, TrendingUp, DollarSign, CheckCircle2, Loader2, ChevronRight, Brain,
 } from 'lucide-react';
 import {
   ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid,
@@ -10,6 +10,7 @@ import { PageHeader } from '@/components/layout/PageHeader';
 import { ScoreBadge } from '@/components/prospects/ScoreBadge';
 import { useAuth } from '@/hooks/useAuth';
 import { useDashboard } from '@/hooks/useDashboard';
+import { useMiEspacio } from '@/hooks/useEspacio';
 import { formatUSD } from '@/lib/format';
 import { CHART_ACCENT, axisTick, gridStroke, tooltipProps } from '@/lib/chartTheme';
 
@@ -21,17 +22,38 @@ const BANDA_META: Record<string, { color: string; rango: string }> = {
 };
 
 export default function Dashboard() {
-  const { profile } = useAuth();
+  const { profile, isOwner } = useAuth();
   const { data, isLoading } = useDashboard();
+  const { data: espacio, isSuccess: espacioListo } = useMiEspacio();
   const nombre = profile?.nombre?.split(' ')[0] || 'de nuevo';
+  // Un usuario que aún no le contó a KODA qué busca recibe los puntajes generales.
+  const sinEspacio = espacioListo && !espacio?.negocio && !espacio?.rubros.length
+    && !espacio?.ciudades.length && !espacio?.palabras_clave.length;
 
   return (
     <div>
       <PageHeader
         eyebrow="Panel · Resumen"
         title={`Hola, ${nombre}`}
-        description="Resumen del embudo de prospección de Connexo."
+        description={isOwner ? 'Resumen del embudo de prospección de Connexo.' : 'Resumen de tu prospección.'}
       />
+
+      {sinEspacio && (
+        <Link to="/mi-espacio" className="mb-5 block">
+          <Card ember className="flex items-center gap-4 transition-colors hover:border-accent/45">
+            <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg border border-line-strong bg-surface-elevated text-accent-text">
+              <Brain className="h-5 w-5" />
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="font-medium text-ink-primary">Enséñale a KODA qué buscas</p>
+              <p className="text-sm text-ink-secondary">
+                Define tu nicho (rubros, ciudades, palabras) y KODA ordena los prospectos a tu medida y aprende de tus decisiones.
+              </p>
+            </div>
+            <ChevronRight className="h-4 w-4 shrink-0 text-ink-muted" />
+          </Card>
+        </Link>
+      )}
 
       {isLoading || !data ? (
         <div className="grid place-items-center py-24 text-ink-muted">
@@ -141,7 +163,7 @@ export default function Dashboard() {
                       <p className="truncate text-xs capitalize text-ink-muted">{p.categoria} · {p.ciudad}</p>
                     </div>
                     {p.status === 'cliente' && <CheckCircle2 className="h-4 w-4 text-success" />}
-                    {p.plan_sugerido && (
+                    {isOwner && p.plan_sugerido && (
                       <span className="num hidden text-xs text-ink-secondary sm:inline">{p.plan_sugerido}</span>
                     )}
                     <ScoreBadge score={p.score} />

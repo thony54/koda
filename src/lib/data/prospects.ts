@@ -10,7 +10,9 @@ import type { Prospect, ProspectStatus, ProspectType, DashboardStats } from '@/t
 import type { ProspectRow } from '@/types/database';
 import { bandForScore, type ScoreBand } from '@/components/prospects/ScoreBadge';
 import { slug } from '@/lib/format';
+import { queryClient } from '@/lib/queryClient';
 import { rowToProspect, prospectToInsertRow } from './mappers';
+import { recalcularPuntajes } from './espacio';
 
 const SELECT_LIST = '*, sources(nombre)';
 const SELECT_DETAIL =
@@ -219,6 +221,15 @@ export async function addProspects(newOnes: Prospect[]): Promise<number> {
   );
   if (contacts.length) await db.from('prospect_contacts').insert(contacts);
   if (signals.length) await db.from('prospect_signals').insert(signals);
+
+  // Los califica koda-scorer con el espacio de su dueño (nicho, plan solo del propietario).
+  // Sin bloquear la importación: si falla, el cron lo hace en minutos.
+  void recalcularPuntajes()
+    .then(() => {
+      queryClient.invalidateQueries({ queryKey: ['prospects'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+    })
+    .catch(() => undefined);
 
   return ids.length;
 }

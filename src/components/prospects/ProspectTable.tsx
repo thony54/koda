@@ -6,6 +6,7 @@ import { TIPO_LABEL, STATUS_LABEL } from './Filters';
 import type { Prospect } from '@/types/domain';
 import type { SortField, SortDir } from '@/lib/data/prospects';
 import { timeAgo } from '@/lib/format';
+import { useAuth } from '@/hooks/useAuth';
 
 const statusVariant: Record<string, 'default' | 'success' | 'warning' | 'info' | 'primary' | 'error'> = {
   nuevo: 'info',
@@ -52,6 +53,8 @@ export function ProspectTable({
   rows, sortBy, sortDir, onSort, selected, onToggle, onToggleAll, loading,
 }: Props) {
   const navigate = useNavigate();
+  // CONECTA / PRO / ULTRA son los planes de Connexo: solo la cuenta propietaria los ve.
+  const { isOwner } = useAuth();
   const allSelected = rows.length > 0 && rows.every((r) => selected.has(r.id));
 
   return (
@@ -72,7 +75,7 @@ export function ProspectTable({
             <SortHeader field="ciudad" label="Ciudad" active={sortBy === 'ciudad'} dir={sortDir} onSort={onSort} />
             <TH>Tipo</TH>
             <SortHeader field="score" label="Score" active={sortBy === 'score'} dir={sortDir} onSort={onSort} />
-            <TH>Plan</TH>
+            {isOwner && <TH>Plan</TH>}
             <TH>Estado</TH>
             <TH>Contacto</TH>
             <SortHeader field="last_seen_at" label="Última vez" active={sortBy === 'last_seen_at'} dir={sortDir} onSort={onSort} />
@@ -106,11 +109,13 @@ export function ProspectTable({
               </TD>
               <TD className="text-ink-secondary">{TIPO_LABEL[p.tipo]}</TD>
               <TD><ScoreBadge score={p.score} /></TD>
-              <TD>
-                {p.plan_sugerido && (
-                  <span className="num text-xs font-medium text-ink-secondary">{p.plan_sugerido}</span>
-                )}
-              </TD>
+              {isOwner && (
+                <TD>
+                  {p.plan_sugerido && (
+                    <span className="num text-xs font-medium text-ink-secondary">{p.plan_sugerido}</span>
+                  )}
+                </TD>
+              )}
               <TD>
                 <Badge variant={statusVariant[p.status] ?? 'default'}>
                   {STATUS_LABEL[p.status]}

@@ -12,8 +12,9 @@ import { useAuth } from '@/hooks/useAuth';
 
 const PAGE_SIZE = 15;
 
-function exportCSV(rows: Prospect[]) {
-  const headers = ['nombre', 'tipo', 'categoria', 'ciudad', 'score', 'plan_sugerido', 'status', 'whatsapp', 'website', 'instagram'];
+function exportCSV(rows: Prospect[], incluirPlan: boolean) {
+  // El plan sugerido (CONECTA / PRO / ULTRA) es de Connexo: solo sale en el CSV de la cuenta propietaria.
+  const headers = ['nombre', 'tipo', 'categoria', 'ciudad', 'score', ...(incluirPlan ? ['plan_sugerido'] : []), 'status', 'whatsapp', 'website', 'instagram'];
   const escape = (v: unknown) => `"${String(v ?? '').replace(/"/g, '""')}"`;
   const body = rows.map((r) => headers.map((h) => escape((r as unknown as Record<string, unknown>)[h])).join(','));
   const csv = [headers.join(','), ...body].join('\n');
@@ -33,7 +34,7 @@ export default function Prospects() {
   const [page, setPage] = useState(1);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const toast = useUIStore((s) => s.toast);
-  const { can } = useAuth();
+  const { can, isOwner } = useAuth();
   const canExport = can('exportar');
   const updateProspect = useUpdateProspect();
 
@@ -87,7 +88,7 @@ export default function Prospects() {
 
   function bulkExport() {
     const chosen = rows.filter((r) => selected.has(r.id));
-    exportCSV(chosen.length ? chosen : rows);
+    exportCSV(chosen.length ? chosen : rows, isOwner);
     toast(`Exportados ${chosen.length || rows.length} prospectos a CSV`, 'success');
   }
 
@@ -101,7 +102,7 @@ export default function Prospects() {
         description="La base de prospectos calificados de Connexo."
         actions={
           canExport ? (
-            <Button variant="secondary" size="sm" onClick={() => exportCSV(rows)}>
+            <Button variant="secondary" size="sm" onClick={() => exportCSV(rows, isOwner)}>
               <Download className="h-4 w-4" /> Exportar CSV
             </Button>
           ) : undefined

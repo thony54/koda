@@ -5,6 +5,7 @@ export { Badge } from './Badge';
 export { Modal } from './Modal';
 export { Spinner } from './Spinner';
 export { Switch } from './Switch';
+export { TagInput } from './TagInput';
 export { Table, THead, TBody, TR, TH, TD } from './Table';
 export { MultiSelect } from './MultiSelect';
 export type { Option } from './MultiSelect';

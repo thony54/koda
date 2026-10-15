@@ -11,12 +11,6 @@ import {
   cleanName, cleanUrl, toE164EC, instagramHandle, dedupeHash,
 } from '../_shared/normalize.ts';
 
-const CIUDADES_OBJETIVO = new Set(['Ibarra', 'Otavalo', 'Quito', 'Guayaquil']);
-const RUBROS_CON_PLANTILLA = new Set([
-  'restaurant', 'restaurante', 'cafe', 'bar', 'hairdresser', 'barber', 'beauty',
-  'veterinary', 'dentist', 'clinic', 'doctors', 'gym', 'fitness_centre', 'real_estate_agency',
-]);
-
 interface Parsed {
   external_id: string;
   google_place_id: string | null;
@@ -136,8 +130,9 @@ function isLinktree(url: string | null): boolean {
   return Boolean(url && /linktr\.ee|beacons|bio\.link|linktree|campsite\.bio/i.test(url));
 }
 
-function deriveSignals(p: Parsed, ciudadJob: string | null): string[] {
-  const ciudad = p.ciudad ?? ciudadJob;
+// Señales PROPIAS del prospecto. Las que dependen del nicho de cada usuario (ciudad y
+// rubro objetivo, palabras clave) las calcula koda-scorer con el espacio del dueño.
+function deriveSignals(p: Parsed): string[] {
   const s: string[] = [];
   if (!p.website) s.push('sin_web');
   if (isLinktree(p.website)) s.push('usa_linktree');
@@ -145,8 +140,6 @@ function deriveSignals(p: Parsed, ciudadJob: string | null): string[] {
   if (p.whatsapp) s.push('whatsapp_publico');
   if ((p.reviews_count ?? 0) >= 10) s.push('resenas_10_plus');
   if ((p.rating ?? 0) >= 4.0) s.push('rating_4_plus');
-  if (ciudad && CIUDADES_OBJETIVO.has(ciudad)) s.push('ciudad_objetivo');
-  if (p.categoria && RUBROS_CON_PLANTILLA.has(p.categoria)) s.push('rubro_con_plantilla');
   if (p.telefono || p.email || p.whatsapp) s.push('contacto_directo');
   if (p.cerrado) s.push('cerrado_permanente');
   if (!p.telefono && !p.email && !p.whatsapp && !p.website && !p.instagram && !p.facebook) s.push('sin_ningun_contacto');
@@ -266,7 +259,7 @@ Deno.serve(async (req) => {
         }
       }
 
-      const signals = deriveSignals(parsed, ciudadJob);
+      const signals = deriveSignals(parsed);
       await admin.from('prospect_signals').delete().eq('prospect_id', prospectId);
       if (signals.length) {
         await admin.from('prospect_signals').insert(signals.map((clave) => ({ prospect_id: prospectId, clave })));

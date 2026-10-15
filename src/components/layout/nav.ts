@@ -16,6 +16,7 @@ import {
   UserCog,
   ShieldCheck,
   KeyRound,
+  Brain,
 } from 'lucide-react';
 import type { AccessRule } from '@/lib/permissions';
 
@@ -41,6 +42,7 @@ export const navGroups: NavGroup[] = [
     items: [
       { to: '/', label: 'Inicio', icon: LayoutDashboard, end: true },
       { to: '/prospectos', label: 'Prospectos', icon: Users },
+      { to: '/mi-espacio', label: 'Mi espacio', icon: Brain },
       { to: '/busquedas', label: 'Búsquedas', icon: Search, permiso: 'busquedas' },
       { to: '/duplicados', label: 'Duplicados', icon: Copy, permiso: 'duplicados' },
       { to: '/importar', label: 'Importar', icon: Upload, permiso: 'importar' },

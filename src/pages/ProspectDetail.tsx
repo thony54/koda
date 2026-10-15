@@ -1,12 +1,14 @@
 import { useParams, Link } from 'react-router-dom';
 import {
   ArrowLeft, Phone, Mail, Globe, Instagram, MapPin, ExternalLink,
-  CheckCircle2, Ban, Loader2, MessageCircle,
+  CheckCircle2, Ban, Loader2, MessageCircle, Brain, ThumbsUp, ThumbsDown,
 } from 'lucide-react';
 import { Card, Badge, Button, Select } from '@/components/ui';
 import { ScoreBreakdown } from '@/components/prospects/ScoreBreakdown';
 import { TIPO_LABEL, STATUS_LABEL } from '@/components/prospects/Filters';
 import { useProspect, useUpdateProspect } from '@/hooks/useProspects';
+import { useAuth } from '@/hooks/useAuth';
+import { useMarcarProspecto, useMiEspacio, useVeredicto } from '@/hooks/useEspacio';
 import { useUIStore } from '@/store/uiStore';
 import { formatPhoneEC, formatDateTime, timeAgo } from '@/lib/format';
 import type { ProspectStatus } from '@/types/domain';
@@ -18,6 +20,7 @@ export default function ProspectDetail() {
   const { data: p, isLoading } = useProspect(id);
   const update = useUpdateProspect();
   const toast = useUIStore((s) => s.toast);
+  const { profile, isOwner } = useAuth();
 
   if (isLoading) {
     return (
@@ -76,7 +79,8 @@ export default function ProspectDetail() {
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <Badge variant="primary">{STATUS_LABEL[p.status]}</Badge>
-          {p.plan_sugerido && <Badge>Plan {p.plan_sugerido}</Badge>}
+          {/* CONECTA / PRO / ULTRA son los planes de Connexo: solo los ve la cuenta propietaria. */}
+          {isOwner && p.plan_sugerido && <Badge>Plan {p.plan_sugerido}</Badge>}
           {p.assigned_to && <Badge variant="info">👤 {p.assigned_to}</Badge>}
           {p.ong_referente && <Badge variant="success">{p.ong_referente}</Badge>}
         </div>
@@ -127,6 +131,9 @@ export default function ProspectDetail() {
 
         {/* Columna lateral */}
         <div className="space-y-5">
+          {/* Enseñarle a KODA (solo con prospectos propios) */}
+          {profile && p.owner_id === profile.id && <EnsenaAKoda prospectId={p.id} />}
+
           {/* Acciones */}
           <Card>
             <h2 className="mb-3 card-title">Acciones</h2>
@@ -219,6 +226,68 @@ export default function ProspectDetail() {
         {p.assigned_to ? '' : ' Sin asignar a Connexo Sellers.'}
       </p>
     </div>
+  );
+}
+
+/** 👍 / 👎: la forma más directa de decirle a KODA qué tipo de cliente buscas. */
+function EnsenaAKoda({ prospectId }: { prospectId: string }) {
+  const toast = useUIStore((s) => s.toast);
+  const { data: espacio } = useMiEspacio();
+  const { data: veredicto } = useVeredicto(prospectId);
+  const marcar = useMarcarProspecto();
+  const aprende = espacio?.aprende !== false;
+  const actual = veredicto?.explicito ?? null;
+
+  const elegir = async (valor: 3 | -3) => {
+    const nuevo = actual === valor ? 0 : valor;       // pulsar de nuevo quita la marca
+    try {
+      await marcar.mutateAsync({ prospectId, valor: nuevo });
+      toast(
+        nuevo === 3 ? 'Anotado: este es tu tipo de cliente. KODA lo recuerda.'
+          : nuevo === -3 ? 'Anotado: este no es para ti. KODA lo recuerda.'
+          : 'Quitaste tu marca.',
+        nuevo === -3 ? 'warning' : 'success',
+      );
+    } catch (e) {
+      toast(e instanceof Error ? e.message : 'No se pudo guardar', 'error');
+    }
+  };
+
+  return (
+    <Card>
+      <div className="mb-1 flex items-center gap-2">
+        <Brain className="h-4 w-4 text-accent-text" />
+        <h2 className="card-title">Enséñale a KODA</h2>
+      </div>
+      <p className="mb-3 text-xs text-ink-muted">
+        ¿Es el tipo de negocio que buscas? KODA lo recuerda para siempre y lo usa para calificar prospectos parecidos.
+      </p>
+      <div className="grid grid-cols-1 gap-2">
+        <Button
+          variant={actual === 3 ? 'primary' : 'secondary'}
+          size="sm"
+          disabled={!aprende || marcar.isPending}
+          aria-pressed={actual === 3}
+          onClick={() => elegir(3)}
+        >
+          <ThumbsUp className="h-4 w-4" /> Es mi tipo
+        </Button>
+        <Button
+          variant={actual === -3 ? 'danger' : 'secondary'}
+          size="sm"
+          disabled={!aprende || marcar.isPending}
+          aria-pressed={actual === -3}
+          onClick={() => elegir(-3)}
+        >
+          <ThumbsDown className="h-4 w-4" /> No es para mí
+        </Button>
+      </div>
+      {!aprende && (
+        <p className="mt-3 text-xs text-warning">
+          Pausaste el aprendizaje. Reactívalo en <Link to="/mi-espacio" className="underline">Mi espacio</Link>.
+        </p>
+      )}
+    </Card>
   );
 }
 

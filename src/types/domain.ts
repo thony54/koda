@@ -49,6 +49,8 @@ export interface Activity {
 
 export interface Prospect {
   id: string;
+  /** Dueño del prospecto (usuario de KODA). */
+  owner_id?: string;
 
   // identidad
   nombre: string;

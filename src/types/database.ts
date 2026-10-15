@@ -67,8 +67,34 @@ export interface Profile {
   created_at: string;
 }
 
+/** El espacio de un usuario: lo que le enseña a KODA sobre su nicho (tabla koda_perfil). */
+export interface KodaPerfil {
+  owner_id: string;
+  negocio: string | null;
+  cliente_ideal: string | null;
+  /** Claves de grupo de rubro (ver src/lib/rubros.ts). */
+  rubros: string[];
+  ciudades: string[];
+  palabras_clave: string[];
+  palabras_excluidas: string[];
+  /** {clave_de_señal: puntos}: sobreescribe las reglas generales solo para este usuario. */
+  pesos: Record<string, number>;
+  /** ¿KODA aprende de sus decisiones? */
+  aprende: boolean;
+  version: number;
+  updated_at: string;
+}
+
+/** Una característica que KODA recuerda (tabla koda_memoria). */
+export interface KodaMemoria {
+  feature: string;
+  pos: number;
+  neg: number;
+}
+
 export interface ProspectRow {
   id: string;
+  owner_id?: string;
   nombre: string;
   nombre_normalizado: string | null;
   tipo: ProspectType;

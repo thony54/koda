@@ -3,16 +3,10 @@
  * calculando señales y KODA Score con las reglas de la sección 6.
  * Es la versión ligera de lo que hará `koda-normalizer` + `koda-scorer`.
  */
-import type { Prospect, ProspectType, ScoreLine, PlanSugerido } from '@/types/domain';
+import type { Prospect, ProspectType, ScoreLine } from '@/types/domain';
 import { RULE_BY_KEY, clampScore } from '@/lib/scoring';
 import { bandForScore } from '@/components/prospects/ScoreBadge';
 import { toE164EC } from '@/lib/format';
-
-const CIUDADES_OBJETIVO = new Set(['Ibarra', 'Otavalo', 'Quito', 'Guayaquil']);
-const RUBROS_CON_PLANTILLA = new Set([
-  'restaurante', 'barbería', 'barberia', 'peluquería', 'peluqueria', 'inmobiliaria',
-  'veterinaria', 'consultorio médico', 'tienda online', 'gastronomía', 'estética', 'estetica',
-]);
 
 export interface ProspectInput {
   nombre: string;
@@ -33,19 +27,14 @@ export interface ProspectInput {
   ong_referente?: string;
 }
 
-function planFor(input: ProspectInput, tiene_website: boolean, score: number): PlanSugerido {
-  if (input.tipo === 'empresa' || (input.tipo === 'creador_contenido' && (input.reviews_count ?? 0) > 200)) return 'ULTRA';
-  if ((input.tipo === 'emprendimiento' || input.tipo === 'profesional_independiente') && !tiene_website && (input.reviews_count ?? 0) < 10) return 'CONECTA';
-  return score >= 50 ? 'PRO' : 'CONECTA';
-}
-
 let importCounter = 0;
 
 export function buildProspectFromInput(input: ProspectInput): Prospect {
   const now = new Date().toISOString();
   const tiene_website = Boolean(input.website);
-  const categoria = (input.categoria ?? '').toLowerCase();
 
+  // Solo señales PROPIAS del prospecto. Las de nicho (ciudad / rubro / palabras) y el plan
+  // los pone koda-scorer con el espacio de cada usuario justo después de importar.
   const signals: string[] = [];
   if (!tiene_website) signals.push('sin_web');
   if (input.usa_linktree) signals.push('usa_linktree');
@@ -53,8 +42,6 @@ export function buildProspectFromInput(input: ProspectInput): Prospect {
   if (input.whatsapp) signals.push('whatsapp_publico');
   if ((input.reviews_count ?? 0) >= 10) signals.push('resenas_10_plus');
   if ((input.rating ?? 0) >= 4.0) signals.push('rating_4_plus');
-  if (input.ciudad && CIUDADES_OBJETIVO.has(input.ciudad)) signals.push('ciudad_objetivo');
-  if (categoria && RUBROS_CON_PLANTILLA.has(categoria)) signals.push('rubro_con_plantilla');
   if (input.whatsapp || input.telefono || input.email) signals.push('contacto_directo');
   if (!input.whatsapp && !input.telefono && !input.email && !input.instagram) signals.push('sin_ningun_contacto');
 
@@ -88,7 +75,7 @@ export function buildProspectFromInput(input: ProspectInput): Prospect {
     reviews_count: input.reviews_count,
     score,
     score_desglose: desglose,
-    plan_sugerido: planFor(input, tiene_website, score),
+    plan_sugerido: undefined,
     status: 'nuevo',
     opt_out: false,
     source_nombre: input.source_nombre ?? 'Importación CSV',

@@ -5,7 +5,8 @@ Pipeline de ingesta que corre en Supabase (Deno). El navegador **nunca** ve la
 
 ```
 search_job → koda-collector → raw_records → koda-normalizer → prospects (+señales)
-                                                   → koda-scorer → score + desglose + plan
+                                                   → koda-scorer → score + desglose (+ plan solo propietario)
+                                                       ↑ espacio del usuario + memoria aprendida (migración 0009)
 ```
 
 ## Funciones
@@ -14,7 +15,7 @@ search_job → koda-collector → raw_records → koda-normalizer → prospects 
 |---|---|---|
 | `koda-collector` | Ejecuta un job contra su fuente (OSM Overpass gratis, o Google Places con key) y guarda el crudo en `raw_records`. Controla costo mensual. | `{ job_id }` |
 | `koda-normalizer` | Toma `raw_records` sin procesar (lotes de 50), normaliza (teléfono E.164, URL limpia), deduplica (5.7), respeta la lista negra de supresión, inserta señales. | `{}` |
-| `koda-scorer` | Calcula `score`, `score_desglose` y `plan_sugerido` desde las señales y `scoring_rules`. Encola aviso si cruza a caliente (umbral configurable en `app_config.hot_threshold`). | `{}` o `{ all: true }` |
+| `koda-scorer` | Calcula `score`, `score_desglose` y `plan_sugerido`. Parte de las señales y `scoring_rules`, y las ajusta al **espacio de cada usuario** (`koda_perfil`: rubros, ciudades, palabras y pesos propios) más lo que KODA **aprendió** de sus decisiones (`koda_memoria`, ±25 pts). `plan_sugerido` (CONECTA/PRO/ULTRA) solo se asigna a la cuenta propietaria. Califica lo marcado por el normalizer y todo prospecto con `score_version` por debajo de la versión del espacio de su dueño; trabaja por lotes (≈40 s) y devuelve `pendientes: true` si quedó trabajo (el cron lo retoma). Encola aviso si cruza a caliente (umbral configurable en `app_config.hot_threshold`). | `{}` o `{ all: true }` |
 | `koda-notifier` | **(Fase 3)** Envía a Discord la cola de `notifications` pendientes según el canal. | `{}` (enviar cola) · `{ check: true }` (estado webhooks) · `{ test: true, canal }` (prueba) |
 | `koda-digest` | **(Fase 3)** Arma un resumen (nuevos, calientes, por ciudad) y lo encola como notificación `reportes`. **Por usuario**: el cron genera uno para cada usuario con webhook de reportes. | `{}` o `{ periodo_horas }` |
 | `koda-users` | **(Multiusuario)** Alta de cuentas y restablecer contraseña. Solo la **cuenta propietaria** (`profiles.es_propietario`; otro Super Admin NO puede) (usa la Auth Admin API, que necesita la `service_role`). | `{ action: 'create', email, password, nombre, rol, permisos, tope_costo_mensual }` · `{ action: 'reset_password', user_id, password }` |

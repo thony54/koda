@@ -11,6 +11,7 @@ import Login from '@/pages/Login';
 const Dashboard = lazy(() => import('@/pages/Dashboard'));
 const Prospects = lazy(() => import('@/pages/Prospects'));
 const ProspectDetail = lazy(() => import('@/pages/ProspectDetail'));
+const MiEspacio = lazy(() => import('@/pages/MiEspacio'));
 const Jobs = lazy(() => import('@/pages/Jobs'));
 const JobRuns = lazy(() => import('@/pages/JobRuns'));
 const Duplicates = lazy(() => import('@/pages/Duplicates'));
@@ -58,6 +59,7 @@ export default function App() {
             <Route index element={<Dashboard />} />
             <Route path="prospectos" element={<Prospects />} />
             <Route path="prospectos/:id" element={<ProspectDetail />} />
+            <Route path="mi-espacio" element={<MiEspacio />} />
             <Route path="busquedas" element={<RequireAccess permiso="busquedas"><Jobs /></RequireAccess>} />
             <Route path="busquedas/:id/runs" element={<RequireAccess permiso="busquedas"><JobRuns /></RequireAccess>} />
             <Route path="duplicados" element={<RequireAccess permiso="duplicados"><Duplicates /></RequireAccess>} />

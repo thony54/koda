@@ -5,6 +5,7 @@
  * escribir exige rol staff).
  */
 import { db } from '@/lib/supabase';
+import { byOwner, ownerForInsert } from '@/lib/scope';
 import type { Prospect, ProspectStatus, ProspectType, DashboardStats } from '@/types/domain';
 import type { ProspectRow } from '@/types/database';
 import { bandForScore, type ScoreBand } from '@/components/prospects/ScoreBadge';
@@ -61,7 +62,7 @@ export async function listProspects(params: ListParams = {}): Promise<ListResult
     sortBy = 'score', sortDir = 'desc', page = 1, pageSize = 15, ...f
   } = params;
 
-  let query = db.from('prospects').select(SELECT_LIST, { count: 'exact' });
+  let query = byOwner(db.from('prospects').select(SELECT_LIST, { count: 'exact' }));
 
   if (f.search) {
     const q = f.search.replace(/[%,]/g, ' ').trim();
@@ -126,7 +127,7 @@ export async function updateProspect(
 
 export async function getFilterFacets() {
   const [{ data: cities }, { data: sources }] = await Promise.all([
-    db.from('prospects').select('ciudad'),
+    byOwner(db.from('prospects').select('ciudad')),
     db.from('sources').select('nombre').order('nombre'),
   ]);
   const ciudades = [...new Set((cities ?? []).map((c) => c.ciudad).filter(Boolean))] as string[];
@@ -137,9 +138,10 @@ export async function getFilterFacets() {
 }
 
 export async function getDashboardStats(): Promise<DashboardStats> {
-  const { data, error } = await db
-    .from('prospects')
-    .select('id, nombre, categoria, ciudad, score, plan_sugerido, status, assigned_to, first_seen_at');
+  const { data, error } = await byOwner(
+    db.from('prospects')
+      .select('id, nombre, categoria, ciudad, score, plan_sugerido, status, assigned_to, first_seen_at'),
+  );
   if (error) throw error;
   const all = data ?? [];
 
@@ -195,7 +197,12 @@ export async function addProspects(newOnes: Prospect[]): Promise<number> {
   const { data: srcRows } = await db.from('sources').select('id, nombre').in('nombre', names);
   const srcId = new Map((srcRows ?? []).map((s) => [s.nombre, s.id]));
 
-  const rows = newOnes.map((p) => prospectToInsertRow(p, srcId.get(p.source_nombre ?? '') ?? null));
+  // owner_id: por defecto es quien inserta (auth.uid()); el Super Admin viendo a otro
+  // usuario inserta directamente en la base de ese usuario.
+  const rows = newOnes.map((p) => ({
+    ...prospectToInsertRow(p, srcId.get(p.source_nombre ?? '') ?? null),
+    ...ownerForInsert(),
+  }));
   const { data: inserted, error } = await db.from('prospects').insert(rows).select('id');
   if (error) throw error;
 
@@ -218,7 +225,7 @@ export async function addProspects(newOnes: Prospect[]): Promise<number> {
 
 /** Claves de dedupe existentes (slug(nombre)|slug(ciudad)) para la importación. */
 export async function getDedupeKeys(): Promise<Set<string>> {
-  const { data } = await db.from('prospects').select('nombre, ciudad');
+  const { data } = await byOwner(db.from('prospects').select('nombre, ciudad'));
   return new Set((data ?? []).map((p) => `${slug(p.nombre)}|${slug(p.ciudad ?? '')}`));
 }
 
@@ -228,9 +235,9 @@ export interface MapPoint {
 }
 
 export async function getMapPoints(): Promise<MapPoint[]> {
-  const { data, error } = await db
-    .from('prospects')
-    .select('id, nombre, ciudad, categoria, lat, lng, score')
+  const { data, error } = await byOwner(
+    db.from('prospects').select('id, nombre, ciudad, categoria, lat, lng, score'),
+  )
     .not('lat', 'is', null)
     .not('lng', 'is', null);
   if (error) throw error;
@@ -242,7 +249,7 @@ export async function deleteProspect(id: string): Promise<void> {
   if (error) throw error;
   // Con RLS, un DELETE sin permiso afecta 0 filas y NO lanza error. Lo detectamos.
   if (!data || data.length === 0) {
-    throw new Error('No se eliminó el prospecto. Tu usuario debe tener rol super_admin o analista y estar activo (permisos RLS).');
+    throw new Error('No se eliminó el prospecto. Tu usuario necesita permiso de edición y la función "Eliminar" (o "Duplicados") habilitada por el administrador.');
   }
 }
 
@@ -255,9 +262,10 @@ export interface DupPair { a: DupCandidate; b: DupCandidate; motivo: string }
 
 /** Detecta pares de posibles duplicados (mismo nombre+ciudad, o nombre muy similar). */
 export async function findDuplicatePairs(): Promise<DupPair[]> {
-  const { data, error } = await db
-    .from('prospects')
-    .select('id, nombre, ciudad, categoria, score, status, source_id, first_seen_at, tiene_website, whatsapp, sources(nombre)');
+  const { data, error } = await byOwner(
+    db.from('prospects')
+      .select('id, nombre, ciudad, categoria, score, status, source_id, first_seen_at, tiene_website, whatsapp, sources(nombre)'),
+  );
   if (error) throw error;
   const rows: DupCandidate[] = (data ?? []).map((r: Record<string, unknown>) => ({
     id: r.id as string, nombre: r.nombre as string, ciudad: (r.ciudad as string) ?? null,

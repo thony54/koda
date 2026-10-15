@@ -8,6 +8,7 @@ import { useProspects, useUpdateProspect } from '@/hooks/useProspects';
 import type { ProspectFilters, SortField, SortDir } from '@/lib/data/prospects';
 import type { Prospect, ProspectStatus } from '@/types/domain';
 import { useUIStore } from '@/store/uiStore';
+import { useAuth } from '@/hooks/useAuth';
 
 const PAGE_SIZE = 15;
 
@@ -32,6 +33,8 @@ export default function Prospects() {
   const [page, setPage] = useState(1);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const toast = useUIStore((s) => s.toast);
+  const { can } = useAuth();
+  const canExport = can('exportar');
   const updateProspect = useUpdateProspect();
 
   const params = useMemo(
@@ -96,9 +99,11 @@ export default function Prospects() {
         title="Prospectos"
         description="La base de prospectos calificados de Connexo."
         actions={
-          <Button variant="secondary" size="sm" onClick={() => exportCSV(rows)}>
-            <Download className="h-4 w-4" /> Exportar CSV
-          </Button>
+          canExport ? (
+            <Button variant="secondary" size="sm" onClick={() => exportCSV(rows)}>
+              <Download className="h-4 w-4" /> Exportar CSV
+            </Button>
+          ) : undefined
         }
       />
 
@@ -113,7 +118,9 @@ export default function Prospects() {
           <div className="mx-1 h-4 w-px bg-line" />
           <button onClick={() => bulkStatus('calificado')} className="rounded px-2 py-1 text-ink-secondary hover:bg-white/5 hover:text-ink-primary">Marcar calificado</button>
           <button onClick={() => bulkStatus('descartado')} className="rounded px-2 py-1 text-ink-secondary hover:bg-white/5 hover:text-ink-primary">Descartar</button>
-          <button onClick={bulkExport} className="rounded px-2 py-1 text-ink-secondary hover:bg-white/5 hover:text-ink-primary">Exportar selección</button>
+          {canExport && (
+            <button onClick={bulkExport} className="rounded px-2 py-1 text-ink-secondary hover:bg-white/5 hover:text-ink-primary">Exportar selección</button>
+          )}
           <button onClick={() => setSelected(new Set())} className="ml-auto rounded px-2 py-1 text-ink-muted hover:text-ink-primary">Limpiar</button>
         </div>
       )}

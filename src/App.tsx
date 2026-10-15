@@ -2,6 +2,7 @@ import { lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Outlet } from 'react-router-dom';
 import { ProtectedRoute } from '@/components/layout/ProtectedRoute';
 import { AppLayout } from '@/components/layout/AppLayout';
+import { RequireAccess } from '@/components/layout/RequireAccess';
 import { Spinner } from '@/components/ui';
 
 // Login va eager (primera pantalla). El resto se carga por demanda (code-split).
@@ -22,6 +23,7 @@ const NotFound = lazy(() => import('@/pages/NotFound'));
 const Scoring = lazy(() => import('@/pages/settings/Scoring'));
 const Sources = lazy(() => import('@/pages/settings/Sources'));
 const Discord = lazy(() => import('@/pages/settings/Discord'));
+const Integrations = lazy(() => import('@/pages/settings/Integrations'));
 const UsersAdmin = lazy(() => import('@/pages/settings/UsersAdmin'));
 const Privacy = lazy(() => import('@/pages/settings/Privacy'));
 
@@ -56,20 +58,21 @@ export default function App() {
             <Route index element={<Dashboard />} />
             <Route path="prospectos" element={<Prospects />} />
             <Route path="prospectos/:id" element={<ProspectDetail />} />
-            <Route path="busquedas" element={<Jobs />} />
-            <Route path="busquedas/:id/runs" element={<JobRuns />} />
-            <Route path="duplicados" element={<Duplicates />} />
-            <Route path="importar" element={<Import />} />
-            <Route path="curaduria" element={<Curation />} />
-            <Route path="mapa" element={<MapPage />} />
-            <Route path="reportes" element={<Reports />} />
-            <Route path="logs" element={<Logs />} />
+            <Route path="busquedas" element={<RequireAccess permiso="busquedas"><Jobs /></RequireAccess>} />
+            <Route path="busquedas/:id/runs" element={<RequireAccess permiso="busquedas"><JobRuns /></RequireAccess>} />
+            <Route path="duplicados" element={<RequireAccess permiso="duplicados"><Duplicates /></RequireAccess>} />
+            <Route path="importar" element={<RequireAccess permiso="importar"><Import /></RequireAccess>} />
+            <Route path="curaduria" element={<RequireAccess permiso="curaduria"><Curation /></RequireAccess>} />
+            <Route path="mapa" element={<RequireAccess permiso="mapa"><MapPage /></RequireAccess>} />
+            <Route path="reportes" element={<RequireAccess permiso="reportes"><Reports /></RequireAccess>} />
+            <Route path="logs" element={<RequireAccess roles={['super_admin']}><Logs /></RequireAccess>} />
 
-            <Route path="configuracion/scoring" element={<Scoring />} />
-            <Route path="configuracion/fuentes" element={<Sources />} />
-            <Route path="configuracion/discord" element={<Discord />} />
-            <Route path="configuracion/usuarios" element={<UsersAdmin />} />
-            <Route path="configuracion/privacidad" element={<Privacy />} />
+            <Route path="configuracion/integraciones" element={<Integrations />} />
+            <Route path="configuracion/discord" element={<RequireAccess permiso="discord"><Discord /></RequireAccess>} />
+            <Route path="configuracion/scoring" element={<RequireAccess roles={['super_admin']}><Scoring /></RequireAccess>} />
+            <Route path="configuracion/fuentes" element={<RequireAccess roles={['super_admin']}><Sources /></RequireAccess>} />
+            <Route path="configuracion/usuarios" element={<RequireAccess roles={['super_admin']}><UsersAdmin /></RequireAccess>} />
+            <Route path="configuracion/privacidad" element={<RequireAccess roles={['super_admin']}><Privacy /></RequireAccess>} />
 
             <Route path="*" element={<NotFound />} />
           </Route>

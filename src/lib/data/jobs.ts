@@ -1,5 +1,6 @@
 /** Capa de datos de búsquedas (search_jobs) y sus ejecuciones (job_runs). */
 import { db, supabase } from '@/lib/supabase';
+import { byOwner, ownerForInsert } from '@/lib/scope';
 import type { JobStatus } from '@/types/database';
 
 /** Extrae el mensaje real de error del cuerpo de la respuesta de la función. */
@@ -68,10 +69,10 @@ interface JobRunEmbed {
 }
 
 export async function listJobs(): Promise<SearchJob[]> {
-  const { data, error } = await db
-    .from('search_jobs')
-    .select('*, sources(nombre), job_runs(status, encontrados, nuevos, finished_at, started_at)')
-    .order('created_at', { ascending: false });
+  const { data, error } = await byOwner(
+    db.from('search_jobs')
+      .select('*, sources(nombre), job_runs(status, encontrados, nuevos, finished_at, started_at)'),
+  ).order('created_at', { ascending: false });
   if (error) throw error;
   return (data ?? []).map((j: Record<string, unknown>) => {
     const runs = (j.job_runs as JobRunEmbed[] | undefined) ?? [];
@@ -111,7 +112,7 @@ export async function upsertJob(job: JobInput & { id?: string }) {
   const { id, ...rest } = job;
   const { error } = id
     ? await db.from('search_jobs').update(rest).eq('id', id)
-    : await db.from('search_jobs').insert(rest);
+    : await db.from('search_jobs').insert({ ...rest, ...ownerForInsert() });
   if (error) throw error;
 }
 
@@ -121,7 +122,7 @@ export async function deleteJob(id: string) {
   // Con RLS, un DELETE sin permiso NO devuelve error: simplemente afecta 0 filas.
   // Si no volvió ninguna fila, avisamos la causa real en vez de fallar en silencio.
   if (!data || data.length === 0) {
-    throw new Error('No se eliminó la búsqueda. Tu usuario debe tener rol super_admin o analista y estar activo (permisos RLS).');
+    throw new Error('No se eliminó la búsqueda. Tu usuario necesita permiso de edición y la función "Búsquedas" habilitada por el administrador.');
   }
 }
 

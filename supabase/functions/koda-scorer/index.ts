@@ -1,15 +1,21 @@
 // koda-scorer (sección 7.3): calcula score, desglose y plan desde las señales y
 // las reglas activas. Si un prospecto cruza a la banda caliente, encola aviso.
+//
+// MULTIUSUARIO: las reglas de scoring son globales (las gestiona el super_admin).
+// El aviso "caliente" se encola con el dueño del prospecto y solo si ese dueño
+// tiene webhook de Discord para el canal `hot`.
 import { corsHeaders, json } from '../_shared/cors.ts';
 import { getAdminClient, requireCaller } from '../_shared/supabaseAdmin.ts';
+import { createOwnerCache } from '../_shared/owners.ts';
 import { computeScore, type Rule } from '../_shared/scoring.ts';
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
   const admin = getAdminClient();
+  const getOwner = createOwnerCache(admin);
 
   try {
-    await requireCaller(req, admin);
+    const caller = await requireCaller(req, admin);
     const body = await req.json().catch(() => ({}));
     const all = Boolean(body?.all);
 
@@ -23,8 +29,14 @@ Deno.serve(async (req) => {
     const HOT = Number(cfg?.valor ?? 75) || 75;
 
     // Prospectos a calificar: los recién normalizados (desglose vacío) o todos.
-    let q = admin.from('prospects').select('id, score').limit(300);
-    if (!all) q = q.filter('score_desglose', 'eq', '{}');
+    // Un usuario normal que pide `all` re-califica solo LO SUYO; el pendiente
+    // (desglose vacío) es parte del pipeline compartido y se procesa para todos.
+    let q = admin.from('prospects').select('id, score, owner_id').limit(300);
+    if (all) {
+      if (!caller.isAdmin) q = q.eq('owner_id', caller.id);
+    } else {
+      q = q.filter('score_desglose', 'eq', '{}');
+    }
     const { data: pending, error: pErr } = await q;
     if (pErr) throw pErr;
     if (!pending || pending.length === 0) return json({ ok: true, calificados: 0, calientes: 0 });
@@ -46,7 +58,12 @@ Deno.serve(async (req) => {
       const eraCaliente = (p.score ?? 0) >= HOT;
       if (score >= HOT && !eraCaliente) {
         calientes++;
-        await admin.from('notifications').insert({ prospect_id: p.id, canal: 'hot', payload: { score, plan } });
+        const owner = await getOwner(p.owner_id as string);
+        if (owner.webhooks.hot) {
+          await admin.from('notifications').insert({
+            prospect_id: p.id, owner_id: p.owner_id, canal: 'hot', payload: { score, plan },
+          });
+        }
       }
     }
 

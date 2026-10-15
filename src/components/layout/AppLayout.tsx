@@ -1,6 +1,7 @@
 import { Outlet } from 'react-router-dom';
 import { Sidebar } from './Sidebar';
 import { Topbar } from './Topbar';
+import { ScopeBanner } from './ScopeSwitcher';
 
 /** Shell autenticado: sidebar fija + topbar + contenido. */
 export function AppLayout() {
@@ -10,6 +11,7 @@ export function AppLayout() {
       <div className="lg:pl-60 flex min-h-screen flex-col">
         <Topbar />
         <main className="flex-1 p-4 sm:p-6">
+          <ScopeBanner />
           <Outlet />
         </main>
       </div>

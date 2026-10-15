@@ -1,13 +1,9 @@
 import { NavLink } from 'react-router-dom';
 import { X } from 'lucide-react';
-import { navGroups, type NavItem } from './nav';
+import { navGroups } from './nav';
 import { useAuth } from '@/hooks/useAuth';
+import { canAccess } from '@/lib/permissions';
 import { useUIStore } from '@/store/uiStore';
-
-function canSee(item: NavItem, rol: string | undefined): boolean {
-  if (!item.roles || item.roles.length === 0) return true;
-  return rol ? item.roles.includes(rol as never) : false;
-}
 
 export function Sidebar() {
   const { profile } = useAuth();
@@ -55,7 +51,7 @@ export function Sidebar() {
         {/* Navegación */}
         <nav className="flex-1 overflow-y-auto px-2 py-3 space-y-4">
           {navGroups.map((group, gi) => {
-            const visible = group.items.filter((it) => canSee(it, profile?.rol));
+            const visible = group.items.filter((it) => canAccess(profile, it));
             if (visible.length === 0) return null;
             return (
               <div key={gi} className="space-y-0.5">

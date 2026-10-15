@@ -7,7 +7,10 @@ import {
 } from 'react';
 import type { Session } from '@supabase/supabase-js';
 import { supabase, supabaseConfigured } from '@/lib/supabase';
-import type { Profile } from '@/types/database';
+import { queryClient } from '@/lib/queryClient';
+import { hasPermission } from '@/lib/permissions';
+import { useScopeStore } from '@/store/scopeStore';
+import type { PermissionKey, Profile } from '@/types/database';
 
 interface AuthContextValue {
   session: Session | null;
@@ -16,6 +19,9 @@ interface AuthContextValue {
   loading: boolean;
   /** Usuario con sesión y perfil activo. Base de ProtectedRoute. */
   isAuthorized: boolean;
+  isSuperAdmin: boolean;
+  /** ¿Tiene esta función habilitada? (Super Admin: siempre.) Sin clave: solo "activo". */
+  can: (permiso?: PermissionKey) => boolean;
   /** true cuando NO hay Supabase configurado (falta .env.local). */
   notConfigured: boolean;
   signIn: (email: string, password: string) => Promise<{ error: string | null }>;
@@ -31,7 +37,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [initializing, setInitializing] = useState(true);
-  const [profileResolved, setProfileResolved] = useState(false);
+  // uid cuyo perfil YA terminó de cargarse (con o sin éxito). Comparar contra el
+  // usuario de la sesión evita el parpadeo "Cuenta sin acceso" al restaurar la
+  // sesión (un render con sesión pero con el perfil todavía sin pedir).
+  const [profileUid, setProfileUid] = useState<string | null>(null);
 
   // 1) Sesión: getSession inicial + suscripción. El callback de
   // onAuthStateChange SOLO actualiza el estado de forma síncrona. NO se llama a
@@ -42,7 +51,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     if (!supabaseConfigured) {
       setInitializing(false);
-      setProfileResolved(true);
       return;
     }
 
@@ -66,13 +74,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // FUERA del callback de auth, así no hay deadlock.
   useEffect(() => {
     const uid = session?.user?.id;
+    // Multiusuario: al cambiar (o perder) la sesión se descarta TODA la caché de
+    // datos y el alcance del admin, para no mostrar datos de otra cuenta.
+    queryClient.clear();
+    useScopeStore.getState().reset();
     if (!uid) {
       setProfile(null);
-      setProfileResolved(true);
+      setProfileUid(null);
       return;
     }
     let active = true;
-    setProfileResolved(false);
     supabase
       .from('profiles')
       .select('*')
@@ -81,8 +92,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .then(({ data, error }) => {
         if (!active) return;
         if (error) console.warn('[KODA] No se pudo cargar el perfil:', error.message);
-        setProfile((data as Profile | null) ?? null);
-        setProfileResolved(true);
+        const p = (data as Profile | null) ?? null;
+        // El alcance se fija ANTES de publicar el perfil: así la primera consulta
+        // de cualquier pantalla ya sale filtrada (el admin arranca en "Mis datos").
+        if (p) useScopeStore.getState().initFor(p);
+        setProfile(p);
+        setProfileUid(uid);
       });
     return () => {
       active = false;
@@ -122,8 +137,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setProfile(null);
   }
 
-  const loading = initializing || (Boolean(session) && !profileResolved);
+  const loading = initializing || (Boolean(session) && profileUid !== session?.user?.id);
   const isAuthorized = Boolean(session && profile?.activo);
+  const isSuperAdmin = Boolean(profile?.activo && profile.rol === 'super_admin');
+  const can = (permiso?: PermissionKey) => hasPermission(profile, permiso);
 
   return (
     <AuthContext.Provider
@@ -132,6 +149,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         profile,
         loading,
         isAuthorized,
+        isSuperAdmin,
+        can,
         notConfigured: !supabaseConfigured,
         signIn,
         signOut,

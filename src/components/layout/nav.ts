@@ -15,15 +15,14 @@ import {
   MessageSquare,
   UserCog,
   ShieldCheck,
+  KeyRound,
 } from 'lucide-react';
-import type { UserRole } from '@/types/database';
+import type { AccessRule } from '@/lib/permissions';
 
-export interface NavItem {
+export interface NavItem extends AccessRule {
   to: string;
   label: string;
   icon: LucideIcon;
-  /** Roles con acceso. Vacío/undefined = todos los usuarios activos. */
-  roles?: UserRole[];
   end?: boolean;
 }
 
@@ -32,26 +31,32 @@ export interface NavGroup {
   items: NavItem[];
 }
 
+/**
+ * Menú por usuario. `permiso` = función que el Super Admin habilita en Usuarios;
+ * `roles` = pantallas reservadas al administrador. Sin ninguno = todos los activos.
+ * Cada ruta se protege igual en App.tsx con <RequireAccess>.
+ */
 export const navGroups: NavGroup[] = [
   {
     items: [
       { to: '/', label: 'Inicio', icon: LayoutDashboard, end: true },
       { to: '/prospectos', label: 'Prospectos', icon: Users },
-      { to: '/busquedas', label: 'Búsquedas', icon: Search },
-      { to: '/duplicados', label: 'Duplicados', icon: Copy },
-      { to: '/importar', label: 'Importar', icon: Upload },
-      { to: '/curaduria', label: 'Curaduría', icon: Sparkles },
-      { to: '/mapa', label: 'Mapa', icon: Map },
-      { to: '/reportes', label: 'Reportes', icon: BarChart3 },
+      { to: '/busquedas', label: 'Búsquedas', icon: Search, permiso: 'busquedas' },
+      { to: '/duplicados', label: 'Duplicados', icon: Copy, permiso: 'duplicados' },
+      { to: '/importar', label: 'Importar', icon: Upload, permiso: 'importar' },
+      { to: '/curaduria', label: 'Curaduría', icon: Sparkles, permiso: 'curaduria' },
+      { to: '/mapa', label: 'Mapa', icon: Map, permiso: 'mapa' },
+      { to: '/reportes', label: 'Reportes', icon: BarChart3, permiso: 'reportes' },
       { to: '/logs', label: 'Auditoría', icon: ScrollText, roles: ['super_admin'] },
     ],
   },
   {
     label: 'Configuración',
     items: [
-      { to: '/configuracion/scoring', label: 'Reglas de scoring', icon: SlidersHorizontal, roles: ['super_admin', 'analista'] },
-      { to: '/configuracion/fuentes', label: 'Fuentes', icon: Database, roles: ['super_admin', 'analista'] },
-      { to: '/configuracion/discord', label: 'Discord', icon: MessageSquare, roles: ['super_admin'] },
+      { to: '/configuracion/integraciones', label: 'Integraciones', icon: KeyRound },
+      { to: '/configuracion/discord', label: 'Discord', icon: MessageSquare, permiso: 'discord' },
+      { to: '/configuracion/scoring', label: 'Reglas de scoring', icon: SlidersHorizontal, roles: ['super_admin'] },
+      { to: '/configuracion/fuentes', label: 'Fuentes', icon: Database, roles: ['super_admin'] },
       { to: '/configuracion/usuarios', label: 'Usuarios', icon: UserCog, roles: ['super_admin'] },
       { to: '/configuracion/privacidad', label: 'Privacidad', icon: ShieldCheck, roles: ['super_admin'] },
     ],

@@ -1,5 +1,6 @@
 /** Capa de datos de notificaciones Discord y configuración (app_config). */
 import { db, supabase } from '@/lib/supabase';
+import { byOwner } from '@/lib/scope';
 
 async function invokeFn<T>(name: string, body: Record<string, unknown>): Promise<T> {
   const { data, error } = await supabase.functions.invoke(name, { body });
@@ -33,8 +34,8 @@ export async function flushNotifications(): Promise<{ enviados: number; fallidos
   return invokeFn('koda-notifier', {});
 }
 
-/** Genera el resumen (digest) y lo encola. */
-export async function runDigest(): Promise<{ nuevos: number; calientes: number }> {
+/** Genera el resumen (digest) del usuario y lo encola. */
+export async function runDigest(): Promise<{ nuevos: number; calientes: number; generados: number; sin_webhook: boolean }> {
   return invokeFn('koda-digest', {});
 }
 
@@ -53,7 +54,7 @@ export async function setConfigNumber(clave: string, valor: number): Promise<voi
     .select('clave');
   if (error) throw error;
   if (!data || data.length === 0) {
-    throw new Error('No se pudo guardar la configuración. Tu usuario debe tener rol super_admin o analista y estar activo (permisos RLS).');
+    throw new Error('No se pudo guardar la configuración. Solo el Super Admin puede cambiarla.');
   }
 }
 
@@ -69,9 +70,9 @@ export interface NotifRow {
 }
 
 export async function listRecentNotifications(limit = 20): Promise<NotifRow[]> {
-  const { data, error } = await db
-    .from('notifications')
-    .select('id, canal, status, intento, error_mensaje, enviado_at, created_at')
+  const { data, error } = await byOwner(
+    db.from('notifications').select('id, canal, status, intento, error_mensaje, enviado_at, created_at'),
+  )
     .order('created_at', { ascending: false })
     .limit(limit);
   if (error) throw error;

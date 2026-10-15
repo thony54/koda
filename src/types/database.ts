@@ -11,6 +11,23 @@
 
 export type UserRole = 'super_admin' | 'analista' | 'lector';
 
+/**
+ * Funciones que el super_admin habilita por usuario (profiles.permisos).
+ * ⚠️ Mantener en sync con supabase/functions/_shared/permisos.ts y las políticas
+ * RLS de supabase/migrations/0006_multiusuario.sql.
+ */
+export type PermissionKey =
+  | 'busquedas'
+  | 'google_places'
+  | 'importar'
+  | 'curaduria'
+  | 'duplicados'
+  | 'mapa'
+  | 'reportes'
+  | 'exportar'
+  | 'eliminar'
+  | 'discord';
+
 export type ProspectType =
   | 'negocio_local'
   | 'emprendimiento'
@@ -40,6 +57,11 @@ export interface Profile {
   nombre: string | null;
   rol: UserRole;
   activo: boolean;
+  /** Funciones habilitadas. El super_admin las tiene todas sin necesidad de listarlas. */
+  permisos: PermissionKey[];
+  /** Tope mensual de costo de APIs de pago; null = valor por defecto del servidor. */
+  tope_costo_mensual: number | null;
+  creado_por: string | null;
   created_at: string;
 }
 

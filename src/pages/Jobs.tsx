@@ -8,6 +8,8 @@ import {
 import { useQueryClient } from '@tanstack/react-query';
 import { useJobs, useJobMutations } from '@/hooks/useJobs';
 import { useSources } from '@/hooks/useAdmin';
+import { useAuth } from '@/hooks/useAuth';
+import { useMySecrets } from '@/hooks/useSecrets';
 import { useUIStore } from '@/store/uiStore';
 import { timeAgo } from '@/lib/format';
 import { runJobNow, type SearchJob, type JobInput } from '@/lib/data/jobs';
@@ -35,8 +37,12 @@ const emptyJob: JobInput = { nombre: '', source_id: null, query: '', ciudad: '',
 
 export default function Jobs() {
   const { data: jobs, isLoading } = useJobs();
-  const { data: sources } = useSources();
+  const { data: allSources } = useSources();
+  const { can, isSuperAdmin } = useAuth();
+  const { data: mySecrets } = useMySecrets();
   const { upsert, remove } = useJobMutations();
+  // Google Places solo aparece si el administrador lo habilitó para este usuario.
+  const sources = (allSources ?? []).filter((s) => can('google_places') || !/google/i.test(s.nombre));
   const toast = useUIStore((s) => s.toast);
   const qc = useQueryClient();
   const [editing, setEditing] = useState<(JobInput & { id?: string }) | null>(null);
@@ -58,8 +64,10 @@ export default function Jobs() {
     }
   }
 
-  const selectedSource = (sources ?? []).find((s) => s.id === editing?.source_id);
+  const selectedSource = sources.find((s) => s.id === editing?.source_id);
   const isGoogle = /google/i.test(selectedSource?.nombre ?? '');
+  // El super admin puede caer a la clave global del proyecto; el resto necesita la suya.
+  const missingGoogleKey = isGoogle && !isSuperAdmin && mySecrets !== undefined && !mySecrets.google_places_api_key;
 
   async function save() {
     if (!editing) return;
@@ -170,10 +178,18 @@ export default function Jobs() {
             <div className="grid grid-cols-2 gap-3">
               <Select label="Fuente" value={editing.source_id ?? ''} onChange={(e) => setEditing({ ...editing, source_id: e.target.value || null })}>
                 <option value="">— elegir —</option>
-                {(sources ?? []).map((s) => <option key={s.id} value={s.id}>{s.nombre}</option>)}
+                {sources.map((s) => <option key={s.id} value={s.id}>{s.nombre}</option>)}
               </Select>
               <Input label="Ciudad" value={editing.ciudad ?? ''} onChange={(e) => setEditing({ ...editing, ciudad: e.target.value })} placeholder="Ibarra" />
             </div>
+
+            {missingGoogleKey && (
+              <p className="rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-300">
+                Para buscar con Google necesitas tu propia API key.{' '}
+                <Link to="/configuracion/integraciones" className="font-medium underline">Agrégala en Integraciones</Link>.
+                Puedes guardar la búsqueda, pero no se ejecutará hasta entonces.
+              </p>
+            )}
 
             {isGoogle ? (
               <div>

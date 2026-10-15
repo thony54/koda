@@ -16,9 +16,31 @@ search_job → koda-collector → raw_records → koda-normalizer → prospects 
 | `koda-normalizer` | Toma `raw_records` sin procesar (lotes de 50), normaliza (teléfono E.164, URL limpia), deduplica (5.7), respeta la lista negra de supresión, inserta señales. | `{}` |
 | `koda-scorer` | Calcula `score`, `score_desglose` y `plan_sugerido` desde las señales y `scoring_rules`. Encola aviso si cruza a caliente (umbral configurable en `app_config.hot_threshold`). | `{}` o `{ all: true }` |
 | `koda-notifier` | **(Fase 3)** Envía a Discord la cola de `notifications` pendientes según el canal. | `{}` (enviar cola) · `{ check: true }` (estado webhooks) · `{ test: true, canal }` (prueba) |
-| `koda-digest` | **(Fase 3)** Arma un resumen (nuevos, calientes, por ciudad) y lo encola como notificación `reportes`. | `{}` o `{ periodo_horas }` |
+| `koda-digest` | **(Fase 3)** Arma un resumen (nuevos, calientes, por ciudad) y lo encola como notificación `reportes`. **Por usuario**: el cron genera uno para cada usuario con webhook de reportes. | `{}` o `{ periodo_horas }` |
+| `koda-users` | **(Multiusuario)** Alta de cuentas y restablecer contraseña. Solo Super Admin (usa la Auth Admin API, que necesita la `service_role`). | `{ action: 'create', email, password, nombre, rol, permisos, tope_costo_mensual }` · `{ action: 'reset_password', user_id, password }` |
 
-`_shared/` tiene utilidades reutilizables (normalización, dedupe, scoring, fuentes).
+`_shared/` tiene utilidades reutilizables (normalización, dedupe, scoring, fuentes,
+dueños/webhooks por usuario).
+
+## Multiusuario
+
+Cada usuario tiene su propia base de prospectos, sus búsquedas y sus claves. Como
+estas funciones usan la `service_role` (se saltan RLS), **el aislamiento se aplica
+en el código**:
+
+- `requireCaller` identifica quién llama y exige que esté **activo**. `can()` /
+  `caller.isAdmin` deciden qué puede tocar.
+- El collector solo ejecuta un job al **dueño** (`search_jobs.owner_id`), al Super
+  Admin o al cron, y exige las funciones `busquedas` (y `google_places` para Google).
+- El normalizer deduplica **dentro del dueño** de cada `raw_record`; un mismo
+  negocio puede existir en la base de dos usuarios.
+- Las claves por usuario (`google_places_api_key`, `discord_webhook_*`) viven
+  cifradas en Supabase Vault y solo se leen aquí con la RPC `get_user_secrets`
+  (ejecutable únicamente por `service_role`). El navegador solo ve los últimos 4
+  caracteres.
+- Los secretos globales (`GOOGLE_PLACES_API_KEY`, `DISCORD_WEBHOOK_*`) quedan como
+  respaldo **solo del Super Admin** y de los avisos de sistema sin dueño.
+- Los webhooks escritos por usuarios deben ser de `discord.com` (anti-SSRF).
 
 Los rubros de OSM (qué se traduce cada categoría a tags de OpenStreetMap) viven en
 `_shared/sources/osm.ts` (`RUBRO_TAGS`). El campo `search_jobs.categorias` guarda
@@ -50,9 +72,21 @@ supabase functions deploy koda-normalizer
 supabase functions deploy koda-scorer
 supabase functions deploy koda-notifier   # Fase 3
 supabase functions deploy koda-digest     # Fase 3
+supabase functions deploy koda-users      # Multiusuario
 ```
 
+> **Orden al activar multiusuario:** primero la migración `0006_multiusuario.sql`
+> (crea `owner_id`, permisos y los secretos), **después** desplegar las funciones y
+> el front. Las funciones nuevas dependen de las columnas y RPC de esa migración.
+
 ## Migraciones nuevas
+
+- `0006_multiusuario.sql`: convierte KODA a multiusuario. Agrega `profiles.permisos`
+  y `owner_id` en prospectos / búsquedas / ejecuciones / etiquetas (todo lo existente
+  pasa al Super Admin), reescribe RLS por dueño, la unicidad pasa a ser por dueño,
+  crea los secretos por usuario en Vault (`set_my_secret`, `get_user_secrets`…) y
+  `admin_user_stats()`. Los registros nuevos en Auth nacen **inactivos**: solo el
+  Super Admin los habilita al crearlos desde el panel. Idempotente.
 
 - `0005_audit_retention.sql`: crea `app_config` (umbral caliente, días de
   retención), los triggers de auditoría (`audit_log` se llena solo) y la función

@@ -5,6 +5,7 @@ import {
 import { PageHeader, EmptyState } from '@/components/layout/PageHeader';
 import { Card, Button } from '@/components/ui';
 import { useReportData } from '@/hooks/useAdmin';
+import { useAuth } from '@/hooks/useAuth';
 import { STATUS_LABEL } from '@/components/prospects/Filters';
 import type { ReportBucket } from '@/lib/data/admin';
 import type { ProspectStatus } from '@/types/domain';
@@ -45,6 +46,7 @@ function exportReport(data: { total: number; porCiudad: ReportBucket[]; porRubro
 
 export default function Reports() {
   const { data, isLoading } = useReportData();
+  const { can } = useAuth();
 
   if (isLoading) {
     return (
@@ -70,7 +72,9 @@ export default function Reports() {
       <PageHeader
         title="Reportes"
         description={`${data.total} prospectos analizados.`}
-        actions={<Button variant="secondary" size="sm" onClick={() => exportReport(data)}><Download className="h-4 w-4" /> Exportar CSV</Button>}
+        actions={can('exportar')
+          ? <Button variant="secondary" size="sm" onClick={() => exportReport(data)}><Download className="h-4 w-4" /> Exportar CSV</Button>
+          : undefined}
       />
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
         <BarCard title="Por ciudad" data={data.porCiudad} />

@@ -1,11 +1,32 @@
 // Helper compartido para postear a Discord vía webhook.
-// Los webhooks son SECRETOS: viven en los Secrets de Supabase, nunca en el front.
+//
+// MULTIUSUARIO: cada usuario guarda SUS webhooks (cifrados en Vault, ver
+// 0006_multiusuario.sql). Los secretos globales de Supabase
 //   DISCORD_WEBHOOK_HOT | _NUEVOS | _REPORTES | _ERRORES  (y _DEFAULT de respaldo)
+// quedan SOLO como respaldo del super_admin y de los avisos de sistema sin dueño.
 
-/** Devuelve el webhook del canal, con _DEFAULT como respaldo. null si no hay ninguno. */
+export const CANALES = ['hot', 'nuevos', 'reportes', 'errores'] as const;
+export type Canal = (typeof CANALES)[number];
+
+/** Webhook GLOBAL del canal (secreto de Supabase), con _DEFAULT de respaldo. */
 export function webhookFor(canal: string): string | null {
   const key = `DISCORD_WEBHOOK_${canal.toUpperCase()}`;
   return Deno.env.get(key) ?? Deno.env.get('DISCORD_WEBHOOK_DEFAULT') ?? null;
+}
+
+const DISCORD_HOSTS = new Set(['discord.com', 'discordapp.com', 'ptb.discord.com', 'canary.discord.com']);
+
+/**
+ * Los webhooks los escribe el usuario: solo aceptamos URLs reales de Discord para
+ * que nadie use la función como proxy hacia otros servidores (SSRF).
+ */
+export function esWebhookDiscord(url: string): boolean {
+  try {
+    const u = new URL(url);
+    return u.protocol === 'https:' && DISCORD_HOSTS.has(u.hostname) && u.pathname.startsWith('/api/webhooks/');
+  } catch {
+    return false;
+  }
 }
 
 /** Hace el POST del contenido al webhook. Lanza si Discord responde con error. */
@@ -23,12 +44,11 @@ export async function postToDiscord(url: string, content: string): Promise<void>
 }
 
 /**
- * Envío directo (best-effort) a un canal, sin pasar por la cola.
+ * Envío directo (best-effort) a una URL, sin pasar por la cola.
  * Nunca lanza: úsalo en rutas de error donde un fallo del webhook no debe
  * enmascarar el error original. Devuelve true si se envió.
  */
-export async function tryPostToChannel(canal: string, content: string): Promise<boolean> {
-  const url = webhookFor(canal);
+export async function tryPost(url: string | null, content: string): Promise<boolean> {
   if (!url) return false;
   try {
     await postToDiscord(url, content);

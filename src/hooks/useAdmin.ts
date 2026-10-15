@@ -2,9 +2,9 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   listScoringRules, upsertScoringRule, updateScoringRule, deleteScoringRule, getSimulationBase,
   listSources, upsertSource, deleteSource,
-  listUsers, updateUser,
+  listUsers, updateUser, getUserStats,
   listDeletionRequests, listAuditLog, getReportData,
-  type ScoringRule, type Source,
+  type ScoringRule, type Source, type UserPatch,
 } from '@/lib/data/admin';
 
 // ── Scoring ──────────────────────────────────────────────────────────────
@@ -41,15 +41,21 @@ export function useSourceMutations() {
 }
 
 // ── Usuarios ─────────────────────────────────────────────────────────────
-export function useUsers() {
-  return useQuery({ queryKey: ['users'], queryFn: listUsers });
+/** `enabled=false` para usuarios que no son Super Admin (RLS solo les deja ver su propio perfil). */
+export function useUsers(enabled = true) {
+  return useQuery({ queryKey: ['users'], queryFn: listUsers, enabled });
+}
+export function useUserStats(enabled = true) {
+  return useQuery({ queryKey: ['user-stats'], queryFn: getUserStats, enabled, staleTime: 15_000 });
 }
 export function useUpdateUser() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, patch }: { id: string; patch: { rol?: import('@/types/database').UserRole; activo?: boolean } }) =>
-      updateUser(id, patch),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['users'] }),
+    mutationFn: ({ id, patch }: { id: string; patch: UserPatch }) => updateUser(id, patch),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['users'] });
+      qc.invalidateQueries({ queryKey: ['user-stats'] });
+    },
   });
 }
 

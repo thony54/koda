@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Loader2, Send, RefreshCw, FileBarChart, Save, CheckCircle2, XCircle } from 'lucide-react';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Card, Button, Input, Badge, Table, THead, TBody, TR, TH, TD } from '@/components/ui';
+import { useAuth } from '@/hooks/useAuth';
 import { useUIStore } from '@/store/uiStore';
 import { timeAgo } from '@/lib/format';
 import {
@@ -18,12 +20,13 @@ const CANALES: { canal: Canal; label: string; desc: string }[] = [
 ];
 
 const statusVariant: Record<string, 'success' | 'warning' | 'error' | 'default'> = {
-  enviado: 'success', pendiente: 'warning', error: 'error',
+  enviado: 'success', pendiente: 'warning', error: 'error', omitido: 'default',
 };
 
 export default function Discord() {
   const qc = useQueryClient();
   const toast = useUIStore((s) => s.toast);
+  const { isSuperAdmin } = useAuth();
   const [testing, setTesting] = useState<Canal | null>(null);
   const [busy, setBusy] = useState<'flush' | 'digest' | null>(null);
   const [threshold, setThreshold] = useState('');
@@ -54,7 +57,7 @@ export default function Discord() {
     setTesting(canal);
     try {
       await sendTestNotification(canal);
-      toast(`Mensaje de prueba enviado al canal "${canal}". Revisá Discord.`, 'success');
+      toast(`Mensaje de prueba enviado al canal "${canal}". Revisa Discord.`, 'success');
       qc.invalidateQueries({ queryKey: ['notif-recent'] });
     } catch (e) {
       toast(e instanceof Error ? e.message : 'No se pudo enviar la prueba', 'error');
@@ -76,7 +79,11 @@ export default function Discord() {
     setBusy('digest');
     try {
       const r = await runDigest();
-      toast(`Resumen generado y encolado (${r.nuevos} nuevos, ${r.calientes} calientes). Se envía con la cola.`, 'success');
+      if (r.sin_webhook || r.generados === 0) {
+        toast('No hay webhook de "Reportes" configurado: agrégalo en Integraciones para recibir el resumen.', 'warning');
+      } else {
+        toast(`Resumen generado y encolado (${r.nuevos} nuevos, ${r.calientes} calientes). Se envía con la cola.`, 'success');
+      }
       qc.invalidateQueries({ queryKey: ['notif-recent'] });
     } catch (e) {
       toast(e instanceof Error ? e.message : 'No se pudo generar el resumen', 'error');
@@ -89,26 +96,33 @@ export default function Discord() {
     <div>
       <PageHeader
         title="Discord"
-        description="Canales, webhooks y umbral de score para notificar."
+        description="Estado de tus canales y envío de avisos."
       />
 
       <div className="grid gap-4 lg:grid-cols-2">
-        {/* Umbral caliente */}
+        {/* Umbral caliente (global: lo define el Super Admin) */}
         <Card>
           <h3 className="mb-1 font-semibold text-ink-primary">Umbral de "caliente"</h3>
           <p className="mb-3 text-sm text-ink-secondary">
             Score mínimo para marcar un prospecto como caliente y avisar en Discord.
+            {!isSuperAdmin && ' Es un valor general que define el administrador.'}
           </p>
-          <div className="flex items-end gap-2">
-            <Input
-              label="Score mínimo (0–100)"
-              type="number"
-              value={threshold}
-              onChange={(e) => setThreshold(e.target.value)}
-              className="w-40"
-            />
-            <Button onClick={saveThreshold} loading={savingT} size="sm"><Save className="h-4 w-4" /> Guardar</Button>
-          </div>
+          {isSuperAdmin ? (
+            <div className="flex items-end gap-2">
+              <Input
+                label="Score mínimo (0–100)"
+                type="number"
+                value={threshold}
+                onChange={(e) => setThreshold(e.target.value)}
+                className="w-40"
+              />
+              <Button onClick={saveThreshold} loading={savingT} size="sm"><Save className="h-4 w-4" /> Guardar</Button>
+            </div>
+          ) : (
+            <p className="text-2xl font-semibold text-ink-primary">
+              {thresholdQ.data ?? '—'}<span className="ml-1 text-sm font-normal text-ink-muted">puntos</span>
+            </p>
+          )}
         </Card>
 
         {/* Acciones */}
@@ -132,10 +146,10 @@ export default function Discord() {
       <Card className="mt-4">
         <h3 className="mb-1 font-semibold text-ink-primary">Canales y webhooks</h3>
         <p className="mb-3 text-sm text-ink-secondary">
-          Las URLs de webhook son secretos: se guardan en Supabase (Settings → Edge Functions → Secrets),
-          nunca en esta pantalla. Para cada canal, agregá el secret{' '}
-          <code className="text-ink-primary">DISCORD_WEBHOOK_&lt;CANAL&gt;</code> (o{' '}
-          <code className="text-ink-primary">DISCORD_WEBHOOK_DEFAULT</code> como respaldo).
+          Los webhooks son tuyos y se guardan cifrados: se pegan en{' '}
+          <Link to="/configuracion/integraciones" className="text-[var(--primary-orange)] hover:underline">Integraciones</Link>.
+          Aquí ves cuáles están activos y los pruebas.
+          {isSuperAdmin && ' Como administrador, si no configuras uno propio se usa el secreto global del proyecto.'}
         </p>
 
         {status.isLoading ? (
@@ -153,7 +167,6 @@ export default function Discord() {
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">
                       <span className="font-medium text-ink-primary">{label}</span>
-                      <code className="text-xs text-ink-muted">DISCORD_WEBHOOK_{canal.toUpperCase()}</code>
                     </div>
                     <p className="truncate text-xs text-ink-muted">{desc}</p>
                   </div>

@@ -1,8 +1,12 @@
 // koda-normalizer (sección 7.2): raw_records -> prospects, con dedupe (5.7).
 // Toma lotes de 50, normaliza, deduplica, respeta la lista negra de supresión,
 // inserta señales y marca para re-scoring (score_desglose vacío).
+//
+// MULTIUSUARIO: cada raw_record trae su owner_id. El dedupe se hace DENTRO de ese
+// dueño (dos usuarios pueden tener el mismo negocio) y el prospecto nace suyo.
 import { corsHeaders, json } from '../_shared/cors.ts';
 import { getAdminClient, requireCaller } from '../_shared/supabaseAdmin.ts';
+import { createOwnerCache } from '../_shared/owners.ts';
 import {
   cleanName, cleanUrl, toE164EC, instagramHandle, dedupeHash,
 } from '../_shared/normalize.ts';
@@ -152,13 +156,14 @@ function deriveSignals(p: Parsed, ciudadJob: string | null): string[] {
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
   const admin = getAdminClient();
+  const getOwner = createOwnerCache(admin);
 
   try {
     await requireCaller(req, admin);
 
     const { data: raws, error } = await admin
       .from('raw_records')
-      .select('id, run_id, source_id, external_id, payload')
+      .select('id, run_id, source_id, owner_id, external_id, payload')
       .eq('procesado', false)
       .limit(50);
     if (error) throw error;
@@ -192,19 +197,23 @@ Deno.serve(async (req) => {
 
       if (!parsed) { await admin.from('raw_records').update({ procesado: true }).eq('id', raw.id); continue; }
 
+      const ownerId = raw.owner_id as string;
       const ciudadJob = runToCiudad.get(raw.run_id) ?? null;
       const ciudad = parsed.ciudad ?? ciudadJob;
       const hash = await dedupeHash({ nombre: parsed.nombre, ciudad, telefono: parsed.telefono, website: parsed.website, instagram: parsed.instagram });
 
       if (blacklist.has(hash)) { await admin.from('raw_records').update({ procesado: true }).eq('id', raw.id); saltados++; continue; }
 
+      // Dedupe SOLO entre los prospectos de este dueño.
       let existing: { id: string } | null = null;
       if (parsed.google_place_id) {
-        const { data } = await admin.from('prospects').select('id').eq('google_place_id', parsed.google_place_id).maybeSingle();
+        const { data } = await admin.from('prospects').select('id')
+          .eq('owner_id', ownerId).eq('google_place_id', parsed.google_place_id).maybeSingle();
         existing = data;
       }
       if (!existing) {
-        const { data } = await admin.from('prospects').select('id').eq('dedupe_hash', hash).maybeSingle();
+        const { data } = await admin.from('prospects').select('id')
+          .eq('owner_id', ownerId).eq('dedupe_hash', hash).maybeSingle();
         existing = data;
       }
 
@@ -239,15 +248,19 @@ Deno.serve(async (req) => {
       } else {
         const { data: ins, error: insErr } = await admin
           .from('prospects')
-          .insert({ ...base, dedupe_hash: hash, first_seen_at: new Date().toISOString(), status: 'nuevo' })
+          .insert({ ...base, owner_id: ownerId, dedupe_hash: hash, first_seen_at: new Date().toISOString(), status: 'nuevo' })
           .select('id')
           .single();
         if (insErr) { console.error('insert prospect', insErr.message); continue; }
         prospectId = ins.id;
         nuevos++; bump(raw.run_id, 'nuevos');
-        // Encola aviso a #koda-nuevos. El notifier lo formatea leyendo el prospecto
-        // (que para entonces ya habrá pasado por el scorer y tendrá score/plan).
-        await admin.from('notifications').insert({ prospect_id: prospectId, canal: 'nuevos', payload: {} });
+        // Encola aviso a #koda-nuevos del DUEÑO (solo si tiene webhook: sin él sería
+        // una fila de ruido por cada prospecto). El notifier lo formatea leyendo el
+        // prospecto (que para entonces ya habrá pasado por el scorer).
+        const owner = await getOwner(ownerId);
+        if (owner.webhooks.nuevos) {
+          await admin.from('notifications').insert({ prospect_id: prospectId, owner_id: ownerId, canal: 'nuevos', payload: {} });
+        }
       }
 
       const signals = deriveSignals(parsed, ciudadJob);

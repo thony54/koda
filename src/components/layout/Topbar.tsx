@@ -1,6 +1,7 @@
 import { Menu, Moon, Sun, LogOut } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useUIStore } from '@/store/uiStore';
+import { ScopeSwitcher } from './ScopeSwitcher';
 
 const roleLabel: Record<string, string> = {
   super_admin: 'Super Admin',
@@ -25,6 +26,7 @@ export function Topbar() {
       </button>
 
       <div className="ml-auto flex items-center gap-2">
+        <ScopeSwitcher />
         <button
           onClick={toggleTheme}
           className="p-2 rounded-md text-ink-secondary hover:text-ink-primary hover:bg-white/5"

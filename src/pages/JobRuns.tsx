@@ -37,7 +37,7 @@ export default function JobRuns() {
         <Table>
           <THead>
             <TR className="hover:bg-transparent">
-              <TH>Inicio</TH><TH>Estado</TH><TH className="text-right">Encontrados</TH><TH className="text-right">Nuevos</TH><TH className="text-right">Duplicados</TH><TH>Duración</TH><TH className="text-right">Costo</TH>
+              <TH>Inicio</TH><TH>Estado</TH><TH className="text-right">Encontrados</TH><TH className="text-right">Nuevos</TH><TH className="text-right">Duplicados</TH><TH>Duración</TH><TH className="text-right">Costo</TH><TH></TH>
             </TR>
           </THead>
           <TBody>
@@ -50,6 +50,13 @@ export default function JobRuns() {
                 <TD className="text-right text-ink-muted">{r.duplicados}</TD>
                 <TD className="text-ink-secondary">{duration(r.started_at, r.finished_at)}</TD>
                 <TD className="text-right text-ink-secondary">{formatUSD(r.costo_estimado)}</TD>
+                <TD className="text-right">
+                  {r.encontrados > 0 && (
+                    <Link to={`/prospectos?corrida=${r.id}`} className="text-xs font-medium text-accent-text hover:underline">
+                      Ver prospectos →
+                    </Link>
+                  )}
+                </TD>
               </TR>
             ))}
           </TBody>

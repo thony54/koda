@@ -1,16 +1,33 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Users, Download, ChevronLeft, ChevronRight, Loader2 } from 'lucide-react';
 import { PageHeader, EmptyState } from '@/components/layout/PageHeader';
 import { Filters, STATUS_LABEL } from '@/components/prospects/Filters';
 import { ProspectTable } from '@/components/prospects/ProspectTable';
 import { Button } from '@/components/ui';
 import { useProspects, useUpdateProspect } from '@/hooks/useProspects';
-import type { ProspectFilters, SortField, SortDir } from '@/lib/data/prospects';
+import type { ProspectFilters, SortField, SortDir, Encontrados } from '@/lib/data/prospects';
 import type { Prospect, ProspectStatus } from '@/types/domain';
 import { useUIStore } from '@/store/uiStore';
 import { useAuth } from '@/hooks/useAuth';
 
 const PAGE_SIZE = 15;
+
+/**
+ * Filtros que llegan por enlace (desde Búsquedas o el historial de una búsqueda):
+ *   ?busqueda=<id>[,<id>]  ?corrida=<id de la ejecución>  ?encontrados=ultima|hoy|7d|30d  ?nuevos=1
+ */
+function filtrosDeUrl(p: URLSearchParams): ProspectFilters {
+  const f: ProspectFilters = {};
+  const busqueda = p.get('busqueda')?.split(',').filter(Boolean);
+  if (busqueda?.length) f.busqueda = busqueda;
+  const corrida = p.get('corrida');
+  if (corrida) f.corrida = corrida;
+  const enc = p.get('encontrados');
+  if (enc === 'ultima' || enc === 'hoy' || enc === '7d' || enc === '30d') f.encontrados = enc as Encontrados;
+  if (p.get('nuevos') === '1') f.soloNuevos = true;
+  return f;
+}
 
 function exportCSV(rows: Prospect[], incluirPlan: boolean) {
   // El plan sugerido (CONECTA / PRO / ULTRA) es de Connexo: solo sale en el CSV de la cuenta propietaria.
@@ -28,7 +45,8 @@ function exportCSV(rows: Prospect[], incluirPlan: boolean) {
 }
 
 export default function Prospects() {
-  const [filters, setFilters] = useState<ProspectFilters>({});
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [filters, setFilters] = useState<ProspectFilters>(() => filtrosDeUrl(searchParams));
   const [sortBy, setSortBy] = useState<SortField>('score');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
   const [page, setPage] = useState(1);
@@ -37,6 +55,17 @@ export default function Prospects() {
   const { can, isOwner } = useAuth();
   const canExport = can('exportar');
   const updateProspect = useUpdateProspect();
+
+  // Si llegas con otro enlace estando ya en la pantalla, se aplica; el enlace se limpia para que
+  // los filtros que cambies después no se pisen con él.
+  useEffect(() => {
+    const desdeUrl = filtrosDeUrl(searchParams);
+    if (Object.keys(desdeUrl).length === 0) return;
+    setFilters(desdeUrl);
+    setPage(1);
+    setSelected(new Set());
+    setSearchParams({}, { replace: true });
+  }, [searchParams, setSearchParams]);
 
   const params = useMemo(
     () => ({ ...filters, sortBy, sortDir, page, pageSize: PAGE_SIZE }),

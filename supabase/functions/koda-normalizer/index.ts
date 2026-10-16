@@ -173,10 +173,17 @@ Deno.serve(async (req) => {
     const jobIds = [...new Set((runs ?? []).map((r) => r.job_id))];
     const { data: jobs } = await admin.from('search_jobs').select('id, ciudad').in('id', jobIds);
     const runToCiudad = new Map<string, string | null>();
+    const runToJob = new Map<string, string | null>();
     (runs ?? []).forEach((run) => {
       const job = (jobs ?? []).find((j) => j.id === run.job_id);
       runToCiudad.set(run.id, job?.ciudad ?? null);
+      runToJob.set(run.id, run.job_id ?? null);
     });
+
+    // De qué búsqueda (corrida) salió cada prospecto —nuevo o ya existente—: es lo que permite
+    // filtrar la lista de Prospectos por búsqueda. Clave `prospecto|corrida`; si en el mismo
+    // lote aparece dos veces, gana "nuevo".
+    const vinculos = new Map<string, { prospect_id: string; run_id: string; job_id: string | null; owner_id: string; nuevo: boolean }>();
 
     let nuevos = 0, duplicados = 0, saltados = 0;
     const perRun = new Map<string, { nuevos: number; duplicados: number }>();
@@ -259,6 +266,15 @@ Deno.serve(async (req) => {
         }
       }
 
+      if (raw.run_id) {
+        const clave = `${prospectId}|${raw.run_id}`;
+        const previo = vinculos.get(clave);
+        vinculos.set(clave, {
+          prospect_id: prospectId, run_id: raw.run_id, job_id: runToJob.get(raw.run_id) ?? null,
+          owner_id: ownerId, nuevo: Boolean(previo?.nuevo) || !existing,
+        });
+      }
+
       const signals = deriveSignals(parsed);
       await admin.from('prospect_signals').delete().eq('prospect_id', prospectId);
       if (signals.length) {
@@ -274,6 +290,13 @@ Deno.serve(async (req) => {
       if (contactos.length) await admin.from('prospect_contacts').insert(contactos);
 
       await admin.from('raw_records').update({ procesado: true }).eq('id', raw.id);
+    }
+
+    // ignoreDuplicates: si otro lote de la misma corrida ya lo registró (como nuevo), no se pisa.
+    if (vinculos.size) {
+      const { error: vErr } = await admin.from('prospect_runs')
+        .upsert([...vinculos.values()], { onConflict: 'prospect_id,run_id', ignoreDuplicates: true });
+      if (vErr) console.error('[normalizer] no se pudo registrar la búsqueda de origen', vErr.message);
     }
 
     for (const [runId, c] of perRun) {

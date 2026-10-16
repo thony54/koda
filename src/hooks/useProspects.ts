@@ -4,6 +4,7 @@ import {
   getProspect,
   updateProspect,
   getFilterFacets,
+  getCorridaInfo,
   type ListParams,
 } from '@/lib/data/prospects';
 import type { Prospect } from '@/types/domain';
@@ -28,6 +29,16 @@ export function useFilterFacets() {
   return useQuery({
     queryKey: ['prospect-facets'],
     queryFn: getFilterFacets,
+    staleTime: 60_000,   // las búsquedas recientes cambian con cada corrida
+  });
+}
+
+/** Qué ejecución concreta se está mirando (cuando se llega desde el historial de una búsqueda). */
+export function useCorridaInfo(runId: string | undefined) {
+  return useQuery({
+    queryKey: ['corrida-info', runId],
+    queryFn: () => getCorridaInfo(runId!),
+    enabled: Boolean(runId),
     staleTime: 5 * 60_000,
   });
 }

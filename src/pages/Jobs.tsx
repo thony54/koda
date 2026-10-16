@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Search, Plus, Trash2, Loader2, Play, History, Clock } from 'lucide-react';
+import { Search, Plus, Trash2, Loader2, Play, History, Clock, Users } from 'lucide-react';
 import { PageHeader, EmptyState } from '@/components/layout/PageHeader';
 import {
   Button, Input, Select, Badge, Modal, Table, THead, TBody, TR, TH, TD,
@@ -66,6 +66,7 @@ export default function Jobs() {
       toast(`"${j.nombre}": ${r.encontrados} encontrados, ${r.nuevos} nuevos, ${r.calientes} calientes`, 'success');
       qc.invalidateQueries({ queryKey: ['jobs'] });
       qc.invalidateQueries({ queryKey: ['prospects'] });
+      qc.invalidateQueries({ queryKey: ['prospect-facets'] });   // la lista de búsquedas recientes del filtro
       qc.invalidateQueries({ queryKey: ['dashboard'] });
     } catch (e) {
       toast(`Error al ejecutar: ${e instanceof Error ? e.message : 'desconocido'}`, 'error');
@@ -174,6 +175,7 @@ export default function Jobs() {
                     <button title="Ejecutar ahora" disabled={searching} onClick={() => runNow(j)} className="p-1 text-ink-muted hover:text-accent-text disabled:opacity-50">
                       {searching ? <Loader2 className="h-4 w-4 animate-spin text-accent-text" /> : <Play className="h-4 w-4" />}
                     </button>
+                    <Link to={`/prospectos?busqueda=${j.id}`} title="Ver los prospectos de esta búsqueda" className="p-1 text-ink-muted hover:text-accent-text"><Users className="h-4 w-4" /></Link>
                     <Link to={`/busquedas/${j.id}/runs`} title="Historial" className="p-1 text-ink-muted hover:text-ink-primary"><History className="h-4 w-4" /></Link>
                     <button title="Editar" onClick={() => setEditing({ id: j.id, nombre: j.nombre, source_id: j.source_id, query: j.query, ciudad: j.ciudad ?? '', radio_metros: j.radio_metros ?? 15000, cron: j.cron ?? '', activo: j.activo, max_resultados: j.max_resultados ?? 60, categorias: j.categorias ?? [] })} className="p-1 text-ink-muted hover:text-ink-primary text-xs">✎</button>
                     <button title="Eliminar" onClick={() => del(j)} className="p-1 text-ink-muted hover:text-danger"><Trash2 className="h-4 w-4" /></button>

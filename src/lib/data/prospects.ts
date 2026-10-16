@@ -19,6 +19,9 @@ const SELECT_DETAIL =
   '*, sources(nombre), prospect_contacts(*), prospect_signals(*), ' +
   'notes(*, profiles(nombre,email)), activities(*, profiles(nombre,email))';
 
+/** Ventana de "cuándo lo encontró una búsqueda". */
+export type Encontrados = 'ultima' | 'hoy' | '7d' | '30d';
+
 export interface ProspectFilters {
   search?: string;
   ciudad?: string[];
@@ -27,6 +30,14 @@ export interface ProspectFilters {
   status?: ProspectStatus[];
   tieneWeb?: 'si' | 'no';
   source?: string[];
+  /** Búsquedas (search_jobs.id) de las que salió el prospecto. */
+  busqueda?: string[];
+  /** Una ejecución concreta (job_runs.id): "lo que trajo esta corrida". */
+  corrida?: string;
+  /** Prospectos que alguna búsqueda encontró en esa ventana (o en la última corrida). */
+  encontrados?: Encontrados;
+  /** Solo los que la(s) búsqueda(s) CREARON, no los que ya existían. */
+  soloNuevos?: boolean;
 }
 
 export type SortField = 'score' | 'nombre' | 'ciudad' | 'reviews_count' | 'last_seen_at';
@@ -53,6 +64,31 @@ const BAND_RANGE: Record<ScoreBand, [number, number]> = {
   cold: [0, 24],
 };
 
+const NO_ID = '00000000-0000-0000-0000-000000000000';
+
+/** La corrida más reciente que de verdad trajo resultados (de las búsquedas del usuario). */
+async function getUltimaCorrida() {
+  const { data } = await byOwner(
+    db.from('job_runs').select('id, started_at, encontrados, nuevos, search_jobs(nombre)'),
+  )
+    .eq('status', 'ok')
+    .gt('encontrados', 0)
+    .order('started_at', { ascending: false })
+    .limit(1);
+  const r = (data ?? [])[0] as unknown as
+    | { id: string; started_at: string; encontrados: number; nuevos: number; search_jobs: { nombre: string } | null }
+    | undefined;
+  return r ? { id: r.id, started_at: r.started_at, encontrados: r.encontrados, nuevos: r.nuevos, nombre: r.search_jobs?.nombre ?? 'Búsqueda' } : null;
+}
+
+/** Inicio de la ventana en hora local (para "hoy" / "últimos N días"). */
+function desdeDe(e: Exclude<Encontrados, 'ultima'>): string {
+  const now = new Date();
+  const hoy = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  if (e === 'hoy') return hoy.toISOString();
+  return new Date(hoy.getTime() - (e === '7d' ? 6 : 29) * 864e5).toISOString();
+}
+
 async function resolveSourceIds(names: string[]): Promise<string[]> {
   if (!names.length) return [];
   const { data } = await db.from('sources').select('id, nombre').in('nombre', names);
@@ -64,7 +100,11 @@ export async function listProspects(params: ListParams = {}): Promise<ListResult
     sortBy = 'score', sortDir = 'desc', page = 1, pageSize = 15, ...f
   } = params;
 
-  let query = byOwner(db.from('prospects').select(SELECT_LIST, { count: 'exact' }));
+  // Filtrar por búsqueda une con prospect_runs (migración 0011): un prospecto sale una sola vez
+  // aunque varias corridas lo hayan encontrado.
+  const porBusqueda = Boolean(f.busqueda?.length || f.corrida || f.encontrados || f.soloNuevos);
+  const columnas: string = porBusqueda ? `${SELECT_LIST}, prospect_runs!inner(run_id)` : SELECT_LIST;
+  let query = byOwner(db.from('prospects').select(columnas, { count: 'exact' }));
 
   if (f.search) {
     const q = f.search.replace(/[%,]/g, ' ').trim();
@@ -77,6 +117,18 @@ export async function listProspects(params: ListParams = {}): Promise<ListResult
   if (f.source?.length) {
     const ids = await resolveSourceIds(f.source);
     query = query.in('source_id', ids.length ? ids : ['00000000-0000-0000-0000-000000000000']);
+  }
+  if (porBusqueda) {
+    if (f.busqueda?.length) query = query.in('prospect_runs.job_id', f.busqueda);
+    if (f.corrida) {
+      query = query.eq('prospect_runs.run_id', f.corrida);
+    } else if (f.encontrados === 'ultima') {
+      const ultima = await getUltimaCorrida();
+      query = query.eq('prospect_runs.run_id', ultima?.id ?? NO_ID);
+    } else if (f.encontrados) {
+      query = query.gte('prospect_runs.found_at', desdeDe(f.encontrados));
+    }
+    if (f.soloNuevos) query = query.eq('prospect_runs.nuevo', true);
   }
   if (f.banda?.length) {
     const clauses = f.banda.map((b) => {
@@ -94,7 +146,8 @@ export async function listProspects(params: ListParams = {}): Promise<ListResult
   if (error) throw error;
 
   return {
-    rows: (data ?? []).map((r) => rowToProspect(r as ProspectRow)),
+    // `columnas` es dinámica (a veces trae el join con prospect_runs): las filas se tipan a mano.
+    rows: ((data ?? []) as unknown as ProspectRow[]).map((r) => rowToProspect(r)),
     total: count ?? 0,
     page,
     pageSize,
@@ -127,16 +180,60 @@ export async function updateProspect(
   return data ? rowToProspect(data as ProspectRow) : null;
 }
 
+export interface BusquedaFacet {
+  id: string;
+  nombre: string;
+  /** Cuándo corrió por última vez con resultados (null = nunca trajo nada). */
+  ultima: string | null;
+  encontrados: number;
+  nuevos: number;
+}
+
+export interface UltimaBusqueda {
+  id: string;
+  nombre: string;
+  started_at: string;
+  encontrados: number;
+  nuevos: number;
+}
+
 export async function getFilterFacets() {
-  const [{ data: cities }, { data: sources }] = await Promise.all([
+  const [{ data: cities }, { data: sources }, { data: jobs }, ultima] = await Promise.all([
     byOwner(db.from('prospects').select('ciudad')),
     db.from('sources').select('nombre').order('nombre'),
+    byOwner(db.from('search_jobs').select('id, nombre, job_runs(status, encontrados, nuevos, started_at)')),
+    getUltimaCorrida(),
   ]);
   const ciudades = [...new Set((cities ?? []).map((c) => c.ciudad).filter(Boolean))] as string[];
+
+  // Las búsquedas del usuario, la que corrió más recientemente primero.
+  type Run = { status: string; encontrados: number; nuevos: number; started_at: string };
+  const busquedas: BusquedaFacet[] = ((jobs ?? []) as { id: string; nombre: string; job_runs: Run[] | null }[])
+    .map((j) => {
+      const ok = (j.job_runs ?? [])
+        .filter((r) => r.status === 'ok' && r.encontrados > 0)
+        .sort((a, b) => new Date(b.started_at).getTime() - new Date(a.started_at).getTime())[0];
+      return { id: j.id, nombre: j.nombre, ultima: ok?.started_at ?? null, encontrados: ok?.encontrados ?? 0, nuevos: ok?.nuevos ?? 0 };
+    })
+    .sort((a, b) => (b.ultima ?? '').localeCompare(a.ultima ?? '') || a.nombre.localeCompare(b.nombre));
+
   return {
     ciudades: ciudades.sort(),
     sources: (sources ?? []).map((s) => s.nombre),
+    busquedas,
+    ultima: ultima as UltimaBusqueda | null,
   };
+}
+
+/** Datos de una ejecución concreta (para el aviso "estás viendo lo que trajo…"). */
+export async function getCorridaInfo(runId: string): Promise<{ nombre: string; started_at: string; encontrados: number; nuevos: number } | null> {
+  const { data } = await db
+    .from('job_runs')
+    .select('started_at, encontrados, nuevos, search_jobs(nombre)')
+    .eq('id', runId)
+    .maybeSingle();
+  const r = data as { started_at: string; encontrados: number; nuevos: number; search_jobs: { nombre: string } | null } | null;
+  return r ? { nombre: r.search_jobs?.nombre ?? 'Búsqueda', started_at: r.started_at, encontrados: r.encontrados, nuevos: r.nuevos } : null;
 }
 
 export async function getDashboardStats(): Promise<DashboardStats> {

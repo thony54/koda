@@ -11,9 +11,11 @@ interface MultiSelectProps {
   options: Option[];
   value: string[];
   onChange: (value: string[]) => void;
+  /** Ancho del menú desplegable (por defecto 14 rem); para etiquetas largas, p. ej. 'w-80'. */
+  menuWidth?: string;
 }
 
-export function MultiSelect({ label, options, value, onChange }: MultiSelectProps) {
+export function MultiSelect({ label, options, value, onChange, menuWidth = 'w-56' }: MultiSelectProps) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -63,7 +65,7 @@ export function MultiSelect({ label, options, value, onChange }: MultiSelectProp
       </button>
 
       {open && (
-        <div className="glass-panel absolute left-0 top-full z-30 mt-1.5 max-h-64 w-56 animate-fade-in overflow-y-auto rounded-md p-1 shadow-pop">
+        <div className={`glass-panel absolute left-0 top-full z-30 mt-1.5 max-h-64 max-w-[calc(100vw-2rem)] ${menuWidth} animate-fade-in overflow-y-auto rounded-md p-1 shadow-pop`}>
           {options.length === 0 && (
             <p className="px-2.5 py-2 text-xs text-ink-muted">Sin opciones</p>
           )}

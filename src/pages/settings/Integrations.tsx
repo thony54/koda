@@ -161,7 +161,7 @@ export default function Integrations() {
           <SecretRow
             clave="google_places_api_key"
             label="API key de Google Places"
-            description="Google Cloud Console → APIs y servicios → Credenciales. Activa «Places API (New)»."
+            description="Google Cloud Console → APIs y servicios → Credenciales. Activa «Places API (New)». En «Restricciones de la aplicación» elige «Ninguna» (no «Sitios web»: KODA llama desde el servidor, sin referer) y limita la key solo a «Places API (New)»."
             inputLabel="API key"
             placeholder="AIza…"
             enabled

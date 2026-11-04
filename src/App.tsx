@@ -19,6 +19,7 @@ const Import = lazy(() => import('@/pages/Import'));
 const Curation = lazy(() => import('@/pages/Curation'));
 const MapPage = lazy(() => import('@/pages/MapPage'));
 const Reports = lazy(() => import('@/pages/Reports'));
+const Connexo = lazy(() => import('@/pages/Connexo'));
 const Logs = lazy(() => import('@/pages/Logs'));
 const NotFound = lazy(() => import('@/pages/NotFound'));
 const Scoring = lazy(() => import('@/pages/settings/Scoring'));
@@ -67,6 +68,7 @@ export default function App() {
             <Route path="curaduria" element={<RequireAccess permiso="curaduria"><Curation /></RequireAccess>} />
             <Route path="mapa" element={<RequireAccess permiso="mapa"><MapPage /></RequireAccess>} />
             <Route path="reportes" element={<RequireAccess permiso="reportes"><Reports /></RequireAccess>} />
+            <Route path="connexo" element={<RequireAccess connexo><Connexo /></RequireAccess>} />
             <Route path="logs" element={<RequireAccess propietario><Logs /></RequireAccess>} />
 
             <Route path="configuracion/integraciones" element={<Integrations />} />

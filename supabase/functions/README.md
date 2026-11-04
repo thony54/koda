@@ -155,3 +155,18 @@ La retención se agenda sola desde `0005`.
 - **Google Places**: se guarda `place_id` de forma permanente; los campos se
   refrescan (no se almacenan indefinidamente sin actualizar). Ver sección 4.3.
 - Nada de scraping de redes sociales (sección 4.2).
+
+## Puente con Connexo Clients (`koda-connexo`)
+
+Envía prospectos a Connexo Clients (otro proyecto Supabase) para que arme su perfil borrador.
+Solo la cuenta propietaria o quien tenga el permiso `enviar_a_connexo`. Requiere la migración
+`0012_connexo_puente.sql` y estos Secrets (los mismos valores que `KODA_BRIDGE_SECRET` en Connexo):
+
+```bash
+npx supabase secrets set CONNEXO_BRIDGE_URL=https://<ref-de-connexo>.supabase.co/functions/v1/kodaIntake
+npx supabase secrets set CONNEXO_BRIDGE_SECRET=<secreto-largo-aleatorio>
+npx supabase functions deploy koda-connexo
+```
+
+Del lado de Connexo: `supabase secrets set KODA_BRIDGE_SECRET=<el mismo valor>` y
+`supabase functions deploy kodaIntake --no-verify-jwt`. KODA nunca guarda la service_role de Connexo.

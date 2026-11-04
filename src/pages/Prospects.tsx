@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
-import { Users, Download, ChevronLeft, ChevronRight, Loader2 } from 'lucide-react';
+import { Link, useSearchParams } from 'react-router-dom';
+import { Users, Download, ChevronLeft, ChevronRight, Loader2, Send } from 'lucide-react';
 import { PageHeader, EmptyState } from '@/components/layout/PageHeader';
 import { Filters, STATUS_LABEL } from '@/components/prospects/Filters';
 import { ProspectTable } from '@/components/prospects/ProspectTable';
-import { Button } from '@/components/ui';
+import { Badge, Button, Modal } from '@/components/ui';
 import { useProspects, useUpdateProspect } from '@/hooks/useProspects';
+import { useEnviarAConnexo } from '@/hooks/useConnexo';
+import type { ResultadoEnvio } from '@/lib/data/connexo';
 import type { ProspectFilters, SortField, SortDir, Encontrados } from '@/lib/data/prospects';
 import type { Prospect, ProspectStatus } from '@/types/domain';
 import { useUIStore } from '@/store/uiStore';
@@ -52,9 +54,12 @@ export default function Prospects() {
   const [page, setPage] = useState(1);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const toast = useUIStore((s) => s.toast);
-  const { can, isOwner } = useAuth();
+  const { can, isOwner, canConnexo } = useAuth();
   const canExport = can('exportar');
   const updateProspect = useUpdateProspect();
+  const enviarAConnexo = useEnviarAConnexo();
+  const [connexoOpen, setConnexoOpen] = useState(false);
+  const [connexoResultados, setConnexoResultados] = useState<ResultadoEnvio[] | null>(null);
 
   // Si llegas con otro enlace estando ya en la pantalla, se aplica; el enlace se limpia para que
   // los filtros que cambies después no se pisen con él.
@@ -121,6 +126,21 @@ export default function Prospects() {
     toast(`Exportados ${chosen.length || rows.length} prospectos a CSV`, 'success');
   }
 
+  async function enviarSeleccion() {
+    try {
+      const r = await enviarAConnexo.mutateAsync([...selected]);
+      setConnexoResultados(r.resultados);
+      if (r.enviados) setSelected(new Set());
+    } catch (e) {
+      toast(e instanceof Error ? e.message : 'No se pudo enviar a Connexo.', 'error');
+    }
+  }
+
+  function cerrarConnexo() {
+    setConnexoOpen(false);
+    setConnexoResultados(null);
+  }
+
   const noFilters = Object.keys(filters).length === 0;
 
   return (
@@ -149,6 +169,11 @@ export default function Prospects() {
           <div className="mx-1 h-4 w-px bg-line" />
           <button onClick={() => bulkStatus('calificado')} className="rounded px-2 py-1 text-ink-secondary hover:bg-veil/[0.08] hover:text-ink-primary">Marcar calificado</button>
           <button onClick={() => bulkStatus('descartado')} className="rounded px-2 py-1 text-ink-secondary hover:bg-veil/[0.08] hover:text-ink-primary">Descartar</button>
+          {canConnexo && (
+            <button onClick={() => setConnexoOpen(true)} className="inline-flex items-center gap-1 rounded px-2 py-1 text-accent-text hover:bg-veil/[0.08]">
+              <Send className="h-3.5 w-3.5" /> Enviar a Connexo
+            </button>
+          )}
           {canExport && (
             <button onClick={bulkExport} className="rounded px-2 py-1 text-ink-secondary hover:bg-veil/[0.08] hover:text-ink-primary">Exportar selección</button>
           )}
@@ -210,6 +235,64 @@ export default function Prospects() {
             </div>
           </div>
         </>
+      )}
+
+      <Modal
+        open={connexoOpen}
+        onClose={cerrarConnexo}
+        title="Enviar a Connexo"
+        footer={
+          connexoResultados ? (
+            <>
+              <Link to="/connexo"><Button variant="secondary" size="sm">Ver en Connexo</Button></Link>
+              <Button size="sm" onClick={cerrarConnexo}>Listo</Button>
+            </>
+          ) : (
+            <>
+              <Button variant="ghost" size="sm" onClick={cerrarConnexo}>Cancelar</Button>
+              <Button size="sm" onClick={enviarSeleccion} loading={enviarAConnexo.isPending}>
+                Enviar {selected.size}
+              </Button>
+            </>
+          )
+        }
+      >
+        {connexoResultados ? (
+          <ResumenEnvio resultados={connexoResultados} />
+        ) : (
+          <div className="space-y-3 text-sm text-ink-secondary">
+            <p>
+              Vas a enviar <span className="num font-medium text-ink-primary">{selected.size}</span> prospecto(s) a Connexo Clients.
+              Connexo armará un <strong className="text-ink-primary">perfil borrador</strong> de cada uno según su rubro.
+            </p>
+            <p>No se envía ningún WhatsApp ahora: primero revisas y apruebas cada plantilla.</p>
+            <p className="text-xs text-ink-muted">
+              Solo se envían los que tienen un celular con WhatsApp y no pidieron ser contactados.
+            </p>
+          </div>
+        )}
+      </Modal>
+    </div>
+  );
+}
+
+function ResumenEnvio({ resultados }: { resultados: ResultadoEnvio[] }) {
+  const enviados = resultados.filter((r) => r.resultado === 'enviado');
+  const otros = resultados.filter((r) => r.resultado !== 'enviado');
+  return (
+    <div className="space-y-3 text-sm">
+      <p className="text-ink-primary">
+        <span className="num font-semibold">{enviados.length}</span> de {resultados.length} enviado(s) a Connexo.
+      </p>
+      {otros.length > 0 && (
+        <ul className="space-y-1.5">
+          {otros.map((r) => (
+            <li key={r.prospect_id} className="flex items-start gap-2 text-xs text-ink-secondary">
+              <Badge variant={r.resultado === 'error' ? 'error' : 'default'}>{r.resultado === 'error' ? 'Error' : 'Omitido'}</Badge>
+              <span><strong className="text-ink-primary">{r.nombre ?? r.prospect_id}</strong> — {r.motivo}</span>
+            </li>
+          ))}
+        </ul>
       )}
     </div>
   );

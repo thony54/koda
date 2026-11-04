@@ -41,10 +41,10 @@ create table if not exists public.connexo_envios (
   --   pendiente     KODA lo registró y aún no hay respuesta del puente
   --   borrador      perfil armado, esperando que lo apruebes
   --   aprobado      aprobado, listo para el WhatsApp
-  --   wa_enviado    WhatsApp enviado: corre la prueba de 7 días
-  --   aceptado      el negocio aceptó y recibió sus credenciales
+  --   wa_enviado    WhatsApp enviado, esperando respuesta (sin respuesta caduca a los 7 días)
+  --   aceptado      el negocio aceptó y recibió sus credenciales: aquí corre la prueba de 7 días
   --   declinado     respondió "quizás después"
-  --   vencido       la prueba terminó y el perfil se desactivó
+  --   vencido       la invitación caducó sin respuesta, o la prueba terminó y el perfil se desactivó
   --   descartado    lo descartaste
   --   sin_plantilla su rubro todavía no tiene plantilla en Connexo
   --   error         el puente falló (ver `detalle`); se puede reintentar

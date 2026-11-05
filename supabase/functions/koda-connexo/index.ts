@@ -13,7 +13,7 @@
 //   { action: 'revision', envio_ids, paso }       → aprobar | devolver | descartar | restaurar | rellenar
 //   { action: 'detalle', envio_id }               → qué se llenó, de dónde salió cada dato y el enlace de vista previa
 //
-// Opcional: CONNEXO_PUBLIC_URL (por defecto https://connexoapp.com) para armar el enlace a la vista previa.
+// Opcional: CONNEXO_PUBLIC_URL (por defecto https://www.connexoapp.com) para armar el enlace a la vista previa.
 //
 // Secrets de esta función (supabase secrets set):
 //   CONNEXO_BRIDGE_URL     https://<ref-de-connexo>.supabase.co/functions/v1/kodaIntake
@@ -48,7 +48,8 @@ const PASOS_REVISION: Record<string, { puente: 'estado_set' | 'rellenar'; estado
 
 const puenteConfigurado = () => !!Deno.env.get('CONNEXO_BRIDGE_URL') && !!Deno.env.get('CONNEXO_BRIDGE_SECRET');
 /** Dirección pública de los perfiles de Connexo (para el enlace a la vista previa). */
-const urlPublicaConnexo = () => (Deno.env.get('CONNEXO_PUBLIC_URL') ?? 'https://connexoapp.com').replace(/\/+$/, '');
+// OJO: el dominio SIN «www» (connexoapp.com) no resuelve; la app corre en www.connexoapp.com.
+const urlPublicaConnexo = () => (Deno.env.get('CONNEXO_PUBLIC_URL') ?? 'https://www.connexoapp.com').replace(/\/+$/, '');
 
 class PuenteSinConfigurar extends Error {
   constructor() {

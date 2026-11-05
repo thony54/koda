@@ -28,9 +28,9 @@ type Variante = 'default' | 'success' | 'warning' | 'error' | 'info' | 'primary'
 export const ESTADO_CONNEXO: Record<ConnexoEstado, { label: string; variant: Variante; hint: string }> = {
   pendiente:     { label: 'Enviando',      variant: 'default', hint: 'Registrado; esperando la respuesta de Connexo.' },
   borrador:      { label: 'Borrador',      variant: 'info',    hint: 'Perfil armado, esperando tu aprobación.' },
-  aprobado:      { label: 'Aprobado',      variant: 'primary', hint: 'Aprobado, listo para el WhatsApp.' },
-  wa_enviado:    { label: 'WhatsApp enviado', variant: 'warning', hint: 'Corre la prueba de 7 días.' },
-  aceptado:      { label: 'Aceptó',        variant: 'success', hint: 'El negocio aceptó y recibió sus credenciales.' },
+  aprobado:      { label: 'Aprobado',      variant: 'primary', hint: 'Aprobado, listo para invitarlo por WhatsApp.' },
+  wa_enviado:    { label: 'WhatsApp enviado', variant: 'warning', hint: 'Saludo enviado: espera su respuesta (la invitación vence a los 7 días).' },
+  aceptado:      { label: 'Aceptó',        variant: 'success', hint: 'El negocio aceptó: su prueba de 7 días ya corre y recibió sus credenciales.' },
   declinado:     { label: 'Quizás después', variant: 'default', hint: 'Respondió que lo verá más adelante.' },
   vencido:       { label: 'Prueba vencida', variant: 'error',  hint: 'La prueba terminó y el perfil se desactivó.' },
   descartado:    { label: 'Descartado',    variant: 'default', hint: 'Lo descartaste.' },
@@ -86,6 +86,34 @@ export async function refrescarEstadosConnexo(): Promise<{ configurado: boolean;
   return invokeConnexo({ action: 'estado' });
 }
 
+// ── WhatsApp (lo envía Connexo; aquí solo se pide y se ve el cupo del día) ──
+
+export interface CupoWhatsApp {
+  configurado: boolean;
+  limite: number | null;
+  usados: number | null;
+  disponibles: number | null;
+}
+
+/** Cuántos WhatsApp quedan hoy (ventana continua de 24 h). */
+export async function cupoWhatsApp(): Promise<CupoWhatsApp> {
+  return invokeConnexo({ action: 'whatsapp_cupo' });
+}
+
+export interface ResultadoWhatsApp {
+  id: string;
+  nombre?: string;
+  resultado: 'enviado' | 'omitido' | 'error';
+  motivo?: string;
+}
+
+/** Manda el saludo inicial a los negocios APROBADOS que quepan hoy; el resto queda aprobado para después. */
+export async function enviarWhatsApp(
+  ids: string[],
+): Promise<{ enviados: number; resultados: ResultadoWhatsApp[]; cupo: Omit<CupoWhatsApp, 'configurado'> | null }> {
+  return invokeConnexo({ action: 'whatsapp_enviar', envio_ids: ids });
+}
+
 // ── Revisión de los borradores ──────────────────────────────────────────────
 
 export type PasoRevision = 'aprobar' | 'devolver' | 'descartar' | 'restaurar' | 'rellenar';
@@ -139,11 +167,16 @@ export const PASOS_POR_ESTADO: Partial<Record<ConnexoEstado, { paso: PasoRevisio
   descartado: [{ paso: 'restaurar', label: 'Restaurar', tono: 'primary' }],
 };
 
-/** Estados desde los que se puede aprobar / descartar en bloque. */
-export const ESTADOS_PARA: Record<'aprobar' | 'descartar', ConnexoEstado[]> = {
+/** Estados desde los que se puede aprobar / descartar / mandar por WhatsApp en bloque. */
+export const ESTADOS_PARA: Record<'aprobar' | 'descartar' | 'whatsapp', ConnexoEstado[]> = {
   aprobar: ['borrador'],
   descartar: ['borrador', 'aprobado'],
+  whatsapp: ['aprobado'],
 };
+
+/** El envío por WhatsApp falló y dejó su motivo en `detalle` (el negocio sigue aprobado). */
+export const falloWhatsApp = (e: Pick<ConnexoEnvio, 'estado' | 'detalle'>): boolean =>
+  e.estado === 'aprobado' && !!e.detalle && e.detalle.startsWith('WhatsApp no salió');
 
 export const PLANTILLA_CONNEXO: Record<string, string> = {
   default: 'Estándar', barber: 'Barbería', gastro: 'Gastronomía', petcare: 'Mascotas', medical: 'Salud',

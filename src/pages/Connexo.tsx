@@ -1,12 +1,14 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { CheckCheck, Loader2, RefreshCw, Send, X } from 'lucide-react';
+import { CheckCheck, Loader2, MessageCircle, RefreshCw, Send, X } from 'lucide-react';
 import { PageHeader, EmptyState } from '@/components/layout/PageHeader';
 import { Badge, Button, Modal, Table, THead, TBody, TR, TH, TD } from '@/components/ui';
 import { RevisionModal } from '@/components/connexo/RevisionModal';
-import { useEnvios, useRefrescarConnexo, useRevisarEnvios } from '@/hooks/useConnexo';
 import {
-  ESTADO_CONNEXO, ESTADOS_PARA, PLANTILLA_CONNEXO, type ConnexoEnvio, type ConnexoEstado,
+  useCupoWhatsApp, useEnviarWhatsApp, useEnvios, useRefrescarConnexo, useRevisarEnvios,
+} from '@/hooks/useConnexo';
+import {
+  ESTADO_CONNEXO, ESTADOS_PARA, PLANTILLA_CONNEXO, falloWhatsApp, type ConnexoEnvio, type ConnexoEstado,
 } from '@/lib/data/connexo';
 import { timeAgo } from '@/lib/format';
 import { useUIStore } from '@/store/uiStore';
@@ -19,13 +21,25 @@ export default function Connexo() {
   const { data, isLoading, error } = useEnvios();
   const refrescar = useRefrescarConnexo();
   const revisar = useRevisarEnvios();
+  const enviarWa = useEnviarWhatsApp();
+  const { data: cupo } = useCupoWhatsApp();
   const [filtro, setFiltro] = useState<ConnexoEstado | 'todos'>('todos');
   const [busqueda, setBusqueda] = useState('todas');
   const [seleccion, setSeleccion] = useState<Set<string>>(new Set());
   const [revisando, setRevisando] = useState<ConnexoEnvio | null>(null);
   const [confirmarDescarte, setConfirmarDescarte] = useState(false);
+  const [confirmarWa, setConfirmarWa] = useState(false);
 
   const envios = data ?? [];
+
+  // Al abrir la pantalla se traen en silencio los estados de Connexo: así ves de inmediato quién aceptó
+  // el WhatsApp o pidió no ser contactado, sin tener que pulsar «Actualizar estados».
+  const sincronizado = useRef(false);
+  useEffect(() => {
+    if (sincronizado.current || !data?.length) return;
+    sincronizado.current = true;
+    if (data.some((e) => e.estado === 'wa_enviado' || e.estado === 'aprobado')) refrescar.mutate();
+  }, [data, refrescar]);
   const conteo = useMemo(() => {
     const c: Partial<Record<ConnexoEstado, number>> = {};
     for (const e of envios) c[e.estado] = (c[e.estado] ?? 0) + 1;
@@ -42,6 +56,8 @@ export default function Connexo() {
   const elegidos = envios.filter((e) => seleccion.has(e.id));
   const aprobables = elegidos.filter((e) => ESTADOS_PARA.aprobar.includes(e.estado));
   const descartables = elegidos.filter((e) => ESTADOS_PARA.descartar.includes(e.estado));
+  const paraWhatsApp = elegidos.filter((e) => ESTADOS_PARA.whatsapp.includes(e.estado));
+  const hayCupo = cupo?.configurado && cupo.disponibles != null;
   const todosMarcados = seleccionables.length > 0 && seleccionables.every((e) => seleccion.has(e.id));
 
   function alternar(id: string) {
@@ -77,16 +93,43 @@ export default function Connexo() {
     }
   }
 
+  async function mandarWhatsApp(lista: ConnexoEnvio[]) {
+    try {
+      const r = await enviarWa.mutateAsync(lista.map((e) => e.id));
+      const fallos = r.resultados.filter((x) => x.resultado === 'error');
+      const sinCupo = r.resultados.filter((x) => x.resultado === 'omitido' && /Sin cupo/.test(x.motivo ?? '')).length;
+      const partes = [`${r.enviados} WhatsApp enviado(s)`];
+      if (sinCupo) partes.push(`${sinCupo} quedan para mañana (tope diario)`);
+      if (fallos.length) partes.push(`${fallos.length} con error: ${fallos[0].motivo ?? 'sin detalle'}`);
+      toast(partes.join(' · '), fallos.length ? (r.enviados ? 'info' : 'error') : 'success');
+      setSeleccion(new Set());
+    } catch (e) {
+      toast(e instanceof Error ? e.message : 'No se pudo enviar por WhatsApp.', 'error');
+    } finally {
+      setConfirmarWa(false);
+    }
+  }
+
   return (
     <div>
       <PageHeader
         eyebrow="Puente"
         title="Connexo"
-        description="Prospectos que enviaste a Connexo Clients. Revisa el perfil que armó de cada uno y apruébalo antes de invitarlo por WhatsApp."
+        description="Prospectos que enviaste a Connexo Clients. Revisa el perfil que armó de cada uno, apruébalo y luego invítalo por WhatsApp."
         actions={
-          <Button variant="secondary" size="sm" onClick={actualizar} loading={refrescar.isPending}>
-            <RefreshCw className="h-4 w-4" /> Actualizar estados
-          </Button>
+          <div className="flex items-center gap-2">
+            {hayCupo && (
+              <span
+                className="inline-flex items-center gap-1.5 rounded-md border border-line px-2.5 py-1 text-xs text-ink-secondary"
+                title="Saludos por WhatsApp enviados en las últimas 24 horas. Meta limita las conversaciones que una empresa inicia por día."
+              >
+                <MessageCircle className="h-3.5 w-3.5" /> Hoy {cupo.usados}/{cupo.limite}
+              </span>
+            )}
+            <Button variant="secondary" size="sm" onClick={actualizar} loading={refrescar.isPending}>
+              <RefreshCw className="h-4 w-4" /> Actualizar estados
+            </Button>
+          </div>
         }
       />
 
@@ -128,6 +171,9 @@ export default function Connexo() {
               <span className="text-ink-primary">{seleccion.size} seleccionado(s)</span>
               <Button size="sm" onClick={() => enBloque('aprobar', aprobables)} disabled={!aprobables.length} loading={revisar.isPending}>
                 <CheckCheck className="h-4 w-4" /> Aprobar{aprobables.length ? ` (${aprobables.length})` : ''}
+              </Button>
+              <Button size="sm" onClick={() => setConfirmarWa(true)} disabled={!paraWhatsApp.length || (hayCupo && cupo.disponibles === 0)}>
+                <MessageCircle className="h-4 w-4" /> Enviar por WhatsApp{paraWhatsApp.length ? ` (${paraWhatsApp.length})` : ''}
               </Button>
               <Button size="sm" variant="danger" onClick={() => setConfirmarDescarte(true)} disabled={!descartables.length}>
                 Descartar{descartables.length ? ` (${descartables.length})` : ''}
@@ -182,7 +228,7 @@ export default function Connexo() {
                     <TD className="hidden text-ink-secondary xl:table-cell">{e.busqueda_nombre ?? '—'}</TD>
                     <TD>
                       <span title={e.detalle ?? info.hint}><Badge variant={info.variant}>{info.label}</Badge></span>
-                      {e.estado === 'error' && e.detalle && <div className="mt-1 max-w-xs text-xs text-danger">{e.detalle}</div>}
+                      {(e.estado === 'error' || falloWhatsApp(e)) && e.detalle && <div className="mt-1 max-w-xs text-xs text-danger">{e.detalle}</div>}
                     </TD>
                     <TD className="text-ink-muted">{timeAgo(e.enviado_at)}</TD>
                     <TD>
@@ -200,6 +246,38 @@ export default function Connexo() {
       )}
 
       {revisando && <RevisionModal envio={revisando} onClose={() => setRevisando(null)} />}
+
+      <Modal
+        open={confirmarWa}
+        onClose={() => setConfirmarWa(false)}
+        size="sm"
+        title="Enviar por WhatsApp"
+        footer={
+          <>
+            <Button variant="ghost" size="sm" onClick={() => setConfirmarWa(false)}>Cancelar</Button>
+            <Button size="sm" onClick={() => mandarWhatsApp(paraWhatsApp)} loading={enviarWa.isPending}>
+              <MessageCircle className="h-4 w-4" /> Enviar {Math.min(paraWhatsApp.length, hayCupo ? cupo.disponibles ?? paraWhatsApp.length : paraWhatsApp.length)}
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-2 text-sm text-ink-secondary">
+          <p>
+            Se enviará el saludo inicial a <strong className="text-ink-primary">{paraWhatsApp.length}</strong> negocio(s) desde el WhatsApp de Connexo,
+            con dos botones: «¡Sí, enviar demo!» y «Ver más tarde».
+          </p>
+          <p>
+            Solo si tocan «¡Sí, enviar demo!», Connexo activa su perfil, empieza su prueba de 7 días y les manda su enlace con usuario y clave. Si piden
+            que no les escriban, no se les vuelve a contactar.
+          </p>
+          {hayCupo && (
+            <p className={paraWhatsApp.length > (cupo.disponibles ?? 0) ? 'text-warning' : ''}>
+              Hoy quedan <strong>{cupo.disponibles}</strong> de {cupo.limite} envíos.
+              {paraWhatsApp.length > (cupo.disponibles ?? 0) && ' Los que no quepan siguen aprobados y los envías mañana.'}
+            </p>
+          )}
+        </div>
+      </Modal>
 
       <Modal
         open={confirmarDescarte}

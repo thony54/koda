@@ -12,12 +12,15 @@
 //   { action: 'estado' }                          → refresca el estado de los envíos desde Connexo
 //   { action: 'revision', envio_ids, paso }       → aprobar | devolver | descartar | restaurar | rellenar
 //   { action: 'detalle', envio_id }               → qué se llenó, de dónde salió cada dato y el enlace de vista previa
+//   { action: 'whatsapp_cupo' }                   → cuántos WhatsApp quedan hoy (ventana de 24 h)
+//   { action: 'whatsapp_enviar', envio_ids }      → manda el saludo inicial por WhatsApp a los APROBADOS (lo envía Connexo)
 //
 // Opcional: CONNEXO_PUBLIC_URL (por defecto https://www.connexoapp.com) para armar el enlace a la vista previa.
 //
 // Secrets de esta función (supabase secrets set):
 //   CONNEXO_BRIDGE_URL     https://<ref-de-connexo>.supabase.co/functions/v1/kodaIntake
 //   CONNEXO_BRIDGE_SECRET  el mismo valor que KODA_BRIDGE_SECRET en las funciones de Connexo
+//   CONNEXO_WA_URL         (opcional) …/functions/v1/kodaWhatsApp; si falta se deduce de CONNEXO_BRIDGE_URL
 import { corsHeaders, json } from '../_shared/cors.ts';
 import { getAdminClient, requireCaller, type Caller } from '../_shared/supabaseAdmin.ts';
 import { rubroDe } from '../_shared/rubros.ts';
@@ -26,6 +29,8 @@ const VERSION_CONTRATO = 1;
 const MAX_POR_LLAMADA = 50;
 const CONCURRENCIA = 3;
 const TIMEOUT_MS = 30_000;
+// Enviar hasta 50 WhatsApp toma más (Meta responde ~0,5 s por mensaje, 3 en paralelo).
+const TIMEOUT_WA_MS = 120_000;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 // Celular de Ecuador en E.164 sin el "+": 5939 + 8 dígitos. Los fijos no reciben WhatsApp.
 const MOVIL_EC_RE = /^5939\d{8}$/;
@@ -60,13 +65,26 @@ class PuenteSinConfigurar extends Error {
 // deno-lint-ignore no-explicit-any
 type Json = Record<string, any>;
 
-async function llamarPuente(body: Json): Promise<Json> {
-  const url = Deno.env.get('CONNEXO_BRIDGE_URL');
+type Destino = 'intake' | 'whatsapp';
+
+/** Dirección de cada función de Connexo. El WhatsApp vive en `kodaWhatsApp`, al lado de `kodaIntake`. */
+function urlDestino(destino: Destino): string | null {
+  const base = Deno.env.get('CONNEXO_BRIDGE_URL');
+  if (destino === 'intake') return base ?? null;
+  const explicita = Deno.env.get('CONNEXO_WA_URL');
+  if (explicita) return explicita;
+  if (!base) return null;
+  const deducida = base.replace(/\/kodaIntake\/?$/, '/kodaWhatsApp');
+  return deducida === base ? null : deducida;     // no termina en /kodaIntake: hay que decir la dirección a mano
+}
+
+async function llamarPuente(body: Json, destino: Destino = 'intake'): Promise<Json> {
+  const url = urlDestino(destino);
   const secret = Deno.env.get('CONNEXO_BRIDGE_SECRET');
   if (!url || !secret) throw new PuenteSinConfigurar();
 
   const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
+  const timer = setTimeout(() => ctrl.abort(), destino === 'whatsapp' ? TIMEOUT_WA_MS : TIMEOUT_MS);
   try {
     const res = await fetch(url, {
       method: 'POST',
@@ -352,7 +370,7 @@ Deno.serve(async (req) => {
       });
 
       await admin.from('audit_log').insert({
-        usuario_id: caller.id,
+        actor_id: caller.id,
         accion: `connexo_${String(body.paso)}`,
         entidad: 'connexo_envios',
         despues: { pedidos: ids.length, ok: resultados.filter((r) => r.ok).length, errores: resultados.filter((r) => !r.ok).length },
@@ -387,6 +405,81 @@ Deno.serve(async (req) => {
         relleno: r.relleno ?? null,
         preview_url: r.username ? `${urlPublicaConnexo()}/${encodeURIComponent(r.username)}` : null,
       });
+    }
+
+    // ── WhatsApp: cupo del día ────────────────────────────────────────────
+    if (body?.action === 'whatsapp_cupo') {
+      if (!puenteConfigurado()) return json({ ok: true, configurado: false });
+      const r = await llamarPuente({ action: 'cupo' }, 'whatsapp');
+      return json({
+        ok: true,
+        configurado: r.configurado !== false,
+        limite: r.limite ?? null,
+        usados: r.usados ?? null,
+        disponibles: r.disponibles ?? null,
+      });
+    }
+
+    // ── WhatsApp: mandar el saludo inicial a los APROBADOS ────────────────
+    if (body?.action === 'whatsapp_enviar') {
+      const pedidos: unknown[] = Array.isArray(body.envio_ids) ? body.envio_ids : [];
+      const ids: string[] = [...new Set(pedidos.filter((x): x is string => typeof x === 'string' && UUID_RE.test(x)))];
+      if (!ids.length) return json({ error: 'No elegiste ningún negocio.' }, 400);
+      if (ids.length > MAX_POR_LLAMADA) return json({ error: `Elige como máximo ${MAX_POR_LLAMADA} negocios por vez.` }, 400);
+      if (!puenteConfigurado()) return json({ error: new PuenteSinConfigurar().message }, 503);
+
+      let q = admin.from('connexo_envios').select('id, prospect_nombre, estado').in('id', ids);
+      if (!caller.esPropietario) q = q.eq('owner_id', caller.id);
+      const { data: filas, error: fErr } = await q;
+      if (fErr) return json({ error: fErr.message }, 500);
+      const porId = new Map((filas ?? []).map((f) => [f.id as string, f]));
+
+      // Solo los APROBADOS salen (Connexo lo vuelve a comprobar). El resto se explica, no se manda.
+      const resultados: Json[] = [];
+      const aEnviar: string[] = [];
+      for (const id of ids) {
+        const f = porId.get(id);
+        if (!f) resultados.push({ id, resultado: 'omitido', motivo: 'No lo encontré entre tus envíos.' });
+        else if (f.estado !== 'aprobado') {
+          resultados.push({ id, nombre: f.prospect_nombre, resultado: 'omitido', motivo: `Está en «${f.estado}»: primero apruébalo.` });
+        } else aEnviar.push(id);
+      }
+
+      let cupo: Json | null = null;
+      if (aEnviar.length) {
+        const r = await llamarPuente({ action: 'enviar', envio_ids: aEnviar }, 'whatsapp');
+        cupo = (r.cupo as Json) ?? null;
+        for (const it of (r.resultados ?? []) as Json[]) {
+          const id = it.envio_id as string;
+          const nombre = porId.get(id)?.prospect_nombre;
+          if (it.resultado === 'enviado') {
+            await admin.from('connexo_envios')
+              .update({ estado: 'wa_enviado', detalle: null, actualizado_at: new Date().toISOString() }).eq('id', id);
+            resultados.push({ id, nombre, resultado: 'enviado' });
+          } else {
+            // No salió: sigue «aprobado» y queda el motivo a la vista (se ve en la tabla).
+            if (it.resultado === 'error' && it.motivo) {
+              await admin.from('connexo_envios')
+                .update({ detalle: `WhatsApp no salió: ${it.motivo}`, actualizado_at: new Date().toISOString() }).eq('id', id);
+            }
+            resultados.push({ id, nombre, resultado: it.resultado, motivo: it.motivo });
+          }
+        }
+      }
+
+      const enviados = resultados.filter((r) => r.resultado === 'enviado').length;
+      await admin.from('audit_log').insert({
+        actor_id: caller.id,
+        accion: 'connexo_whatsapp_enviar',
+        entidad: 'connexo_envios',
+        despues: {
+          pedidos: ids.length,
+          enviados,
+          omitidos: resultados.filter((r) => r.resultado === 'omitido').length,
+          errores: resultados.filter((r) => r.resultado === 'error').length,
+        },
+      });
+      return json({ ok: true, enviados, resultados, cupo });
     }
 
     return json({ error: 'Acción desconocida.' }, 400);

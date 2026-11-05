@@ -10,6 +10,10 @@
 // Acciones:
 //   { action: 'enviar', prospect_ids: string[] }  → arma el borrador de cada prospecto en Connexo
 //   { action: 'estado' }                          → refresca el estado de los envíos desde Connexo
+//   { action: 'revision', envio_ids, paso }       → aprobar | devolver | descartar | restaurar | rellenar
+//   { action: 'detalle', envio_id }               → qué se llenó, de dónde salió cada dato y el enlace de vista previa
+//
+// Opcional: CONNEXO_PUBLIC_URL (por defecto https://connexoapp.com) para armar el enlace a la vista previa.
 //
 // Secrets de esta función (supabase secrets set):
 //   CONNEXO_BRIDGE_URL     https://<ref-de-connexo>.supabase.co/functions/v1/kodaIntake
@@ -32,6 +36,19 @@ const ESTADOS = new Set([
 ]);
 // Estados que ya no cambian: no vale la pena preguntarle a Connexo por ellos.
 const ESTADOS_FINALES = ['descartado', 'vencido', 'sin_plantilla'];
+
+// Pasos de revisión que KODA puede pedir (el servidor de Connexo valida cada transición).
+const PASOS_REVISION: Record<string, { puente: 'estado_set' | 'rellenar'; estado?: string }> = {
+  aprobar: { puente: 'estado_set', estado: 'aprobado' },
+  devolver: { puente: 'estado_set', estado: 'borrador' },
+  descartar: { puente: 'estado_set', estado: 'descartado' },
+  restaurar: { puente: 'estado_set', estado: 'borrador' },
+  rellenar: { puente: 'rellenar' },
+};
+
+const puenteConfigurado = () => !!Deno.env.get('CONNEXO_BRIDGE_URL') && !!Deno.env.get('CONNEXO_BRIDGE_SECRET');
+/** Dirección pública de los perfiles de Connexo (para el enlace a la vista previa). */
+const urlPublicaConnexo = () => (Deno.env.get('CONNEXO_PUBLIC_URL') ?? 'https://connexoapp.com').replace(/\/+$/, '');
 
 class PuenteSinConfigurar extends Error {
   constructor() {
@@ -302,6 +319,73 @@ Deno.serve(async (req) => {
         },
       });
       return json({ ok: true, enviados, resultados });
+    }
+
+    // ── Revisión: aprobar, devolver, descartar, restaurar o rehacer el relleno ──
+    if (body?.action === 'revision') {
+      const paso = PASOS_REVISION[String(body.paso)];
+      if (!paso) return json({ error: 'Paso de revisión desconocido.' }, 400);
+      const pedidos: unknown[] = Array.isArray(body.envio_ids) ? body.envio_ids : [body.envio_id];
+      const ids: string[] = [...new Set(pedidos.filter((x): x is string => typeof x === 'string' && UUID_RE.test(x)))];
+      if (!ids.length) return json({ error: 'No elegiste ningún negocio.' }, 400);
+      if (ids.length > MAX_POR_LLAMADA) return json({ error: `Elige como máximo ${MAX_POR_LLAMADA} negocios por vez.` }, 400);
+      if (!puenteConfigurado()) return json({ error: new PuenteSinConfigurar().message }, 503);
+
+      let q = admin.from('connexo_envios').select('id, prospect_nombre, estado').in('id', ids);
+      if (!caller.esPropietario) q = q.eq('owner_id', caller.id);
+      const { data: filas, error: fErr } = await q;
+      if (fErr) return json({ error: fErr.message }, 500);
+      const porId = new Map((filas ?? []).map((f) => [f.id as string, f]));
+
+      const resultados = await enParalelo(ids, CONCURRENCIA, async (id) => {
+        const f = porId.get(id);
+        if (!f) return { id, ok: false, error: 'No lo encontré entre tus envíos.' };
+        try {
+          const r = await llamarPuente({ action: paso.puente, envio_id: id, ...(paso.estado ? { estado: paso.estado } : {}) });
+          const estado = ESTADOS.has(r.estado) ? r.estado : f.estado;
+          await admin.from('connexo_envios').update({ estado, detalle: r.detalle ?? null, actualizado_at: new Date().toISOString() }).eq('id', id);
+          return { id, nombre: f.prospect_nombre, ok: paso.puente === 'rellenar' ? r.relleno_ok !== false : true, estado, error: r.relleno_ok === false ? (r.detalle ?? 'El relleno quedó incompleto.') : undefined };
+        } catch (e) {
+          return { id, nombre: f.prospect_nombre, ok: false, error: e instanceof Error ? e.message : String(e) };
+        }
+      });
+
+      await admin.from('audit_log').insert({
+        usuario_id: caller.id,
+        accion: `connexo_${String(body.paso)}`,
+        entidad: 'connexo_envios',
+        despues: { pedidos: ids.length, ok: resultados.filter((r) => r.ok).length, errores: resultados.filter((r) => !r.ok).length },
+      });
+      return json({ ok: true, resultados });
+    }
+
+    // ── Detalle de un envío: qué se llenó, de dónde salió cada dato y el enlace a la vista previa ──
+    if (body?.action === 'detalle') {
+      const id = body.envio_id;
+      if (typeof id !== 'string' || !UUID_RE.test(id)) return json({ error: 'envio_id inválido.' }, 400);
+      if (!puenteConfigurado()) return json({ error: new PuenteSinConfigurar().message }, 503);
+      let q = admin.from('connexo_envios').select('id, estado').eq('id', id);
+      if (!caller.esPropietario) q = q.eq('owner_id', caller.id);
+      const { data: fila, error: fErr } = await q.maybeSingle();
+      if (fErr) return json({ error: fErr.message }, 500);
+      if (!fila) return json({ error: 'No lo encontré entre tus envíos.' }, 404);
+
+      const r = await llamarPuente({ action: 'detalle', envio_id: id });
+      if (ESTADOS.has(r.estado) && r.estado !== fila.estado) {
+        await admin.from('connexo_envios').update({
+          estado: r.estado, detalle: r.detalle ?? null, connexo_username: r.username ?? null, actualizado_at: new Date().toISOString(),
+        }).eq('id', id);
+      }
+      return json({
+        ok: true,
+        estado: r.estado,
+        detalle: r.detalle ?? null,
+        username: r.username ?? null,
+        theme: r.theme ?? null,
+        clave: r.clave ?? null,
+        relleno: r.relleno ?? null,
+        preview_url: r.username ? `${urlPublicaConnexo()}/${encodeURIComponent(r.username)}` : null,
+      });
     }
 
     return json({ error: 'Acción desconocida.' }, 400);

@@ -85,3 +85,105 @@ export async function enviarAConnexo(prospectIds: string[]): Promise<{ enviados:
 export async function refrescarEstadosConnexo(): Promise<{ configurado: boolean; actualizados: number }> {
   return invokeConnexo({ action: 'estado' });
 }
+
+// ── Revisión de los borradores ──────────────────────────────────────────────
+
+export type PasoRevision = 'aprobar' | 'devolver' | 'descartar' | 'restaurar' | 'rellenar';
+
+export interface ResultadoRevision {
+  id: string;
+  nombre?: string;
+  ok: boolean;
+  estado?: ConnexoEstado;
+  error?: string;
+}
+
+/** Aprueba, devuelve, descarta o restaura uno o varios negocios. Connexo valida cada paso. */
+export async function revisarEnvios(ids: string[], paso: PasoRevision): Promise<{ resultados: ResultadoRevision[] }> {
+  return invokeConnexo({ action: 'revision', envio_ids: ids, paso });
+}
+
+export type OrigenDato = 'koda' | 'banco' | 'mixto';
+
+export interface RellenoConnexo {
+  paquete: string | null;
+  campos: Record<string, OrigenDato>;
+  enlaces: number;
+  tablas: Record<string, number>;
+}
+
+export interface DetalleEnvio {
+  estado: ConnexoEstado;
+  detalle: string | null;
+  username: string | null;
+  theme: string | null;
+  clave: string | null;
+  relleno: RellenoConnexo | null;
+  preview_url: string | null;
+}
+
+export async function detalleEnvio(envioId: string): Promise<DetalleEnvio> {
+  return invokeConnexo({ action: 'detalle', envio_id: envioId });
+}
+
+/** Pasos de revisión que KODA ofrece por estado (el WhatsApp y la aceptación los maneja Connexo). */
+export const PASOS_POR_ESTADO: Partial<Record<ConnexoEstado, { paso: PasoRevision; label: string; tono: 'primary' | 'secondary' | 'danger' }[]>> = {
+  borrador: [
+    { paso: 'aprobar', label: 'Aprobar', tono: 'primary' },
+    { paso: 'descartar', label: 'Descartar', tono: 'danger' },
+  ],
+  aprobado: [
+    { paso: 'devolver', label: 'Volver a revisión', tono: 'secondary' },
+    { paso: 'descartar', label: 'Descartar', tono: 'danger' },
+  ],
+  descartado: [{ paso: 'restaurar', label: 'Restaurar', tono: 'primary' }],
+};
+
+/** Estados desde los que se puede aprobar / descartar en bloque. */
+export const ESTADOS_PARA: Record<'aprobar' | 'descartar', ConnexoEstado[]> = {
+  aprobar: ['borrador'],
+  descartar: ['borrador', 'aprobado'],
+};
+
+export const PLANTILLA_CONNEXO: Record<string, string> = {
+  default: 'Estándar', barber: 'Barbería', gastro: 'Gastronomía', petcare: 'Mascotas', medical: 'Salud',
+  ecom: 'Ecommerce', stage: 'Artista', realty: 'Inmobiliaria', sublima: 'Sublimados', gym: 'Gimnasio', hotel: 'Hotel',
+};
+
+// Campos del perfil de Connexo → cómo se le muestra a quien revisa. Lo que no está aquí no se lista.
+const CAMPO_LABEL: Record<string, string> = {
+  displayName: 'Nombre', company: 'Nombre', location: 'Dirección', phone: 'Teléfono', whatsapp: 'WhatsApp',
+  contactEmail: 'Correo', socialMedia: 'Redes y web', bio: 'Descripción', aboutMe: 'Sobre nosotros', jobTitle: 'Título',
+  socialProof: 'Calificación de Google', logoURL: 'Logo con iniciales', products: 'Catálogo y servicios',
+  barber_products: 'Productos a la venta', clinicServices: 'Servicios', coverImageURL: 'Portada',
+  galleryImageURLs: 'Galería de fotos', businessHours: 'Horario', faqs: 'Preguntas frecuentes',
+  backgroundColor: 'Colores y estilo', buttonColor: 'Colores y estilo', textColor: 'Colores y estilo',
+  reservationsEnabled: 'Reservas', reservationSettings: 'Reservas', tableCount: 'Reservas',
+  ecom_booking_form: 'Formulario de citas', gym_settings: 'Reservas', hotel_settings: 'Reservas',
+};
+
+const TABLA_LABEL: Record<string, [string, string]> = {
+  gym_plans: ['plan', 'planes'], gym_classes: ['clase', 'clases'], gym_coaches: ['entrenador', 'entrenadores'],
+  hotel_rooms: ['habitación', 'habitaciones'], hotel_services: ['servicio del hotel', 'servicios del hotel'],
+  realty_properties: ['propiedad', 'propiedades'], realty_agents: ['asesor', 'asesores'],
+  barber_staff: ['persona del equipo', 'personas del equipo'], ecom_staff: ['persona del equipo', 'personas del equipo'],
+};
+
+/** Separa lo que viene del prospecto (KODA) de lo que es contenido de EJEMPLO del banco de recursos. */
+export function resumirRelleno(r: RellenoConnexo | null): { deKoda: string[]; deEjemplo: string[]; tablas: string[]; enlaces: number } {
+  const deKoda = new Set<string>();
+  const deEjemplo = new Set<string>();
+  for (const [campo, origen] of Object.entries(r?.campos ?? {})) {
+    const label = CAMPO_LABEL[campo];
+    if (!label) continue;
+    if (origen === 'koda' || origen === 'mixto') deKoda.add(label);
+    if (origen === 'banco' || origen === 'mixto') deEjemplo.add(label);
+  }
+  // Si un dato viene del prospecto, no se anuncia también como ejemplo (p. ej. un teléfono real).
+  for (const l of deKoda) if (l !== 'Descripción') deEjemplo.delete(l);
+  const tablas = Object.entries(r?.tablas ?? {}).filter(([, n]) => n > 0).map(([t, n]) => {
+    const [uno, varios] = TABLA_LABEL[t] ?? [t, t];
+    return `${n} ${n === 1 ? uno : varios}`;
+  });
+  return { deKoda: [...deKoda], deEjemplo: [...deEjemplo], tablas, enlaces: r?.enlaces ?? 0 };
+}

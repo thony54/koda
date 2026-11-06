@@ -14,6 +14,9 @@ export const RUBROS: { value: string; label: string }[] = [
   { value: 'tiendas', label: 'Tiendas' },
   { value: 'talleres', label: 'Talleres y servicios' },
   { value: 'oficinas', label: 'Oficinas y profesionales' },
+  { value: 'musicos', label: 'Músicos y artistas' },
+  { value: 'sublimados', label: 'Sublimados e imprentas' },
+  { value: 'profesionales', label: 'Profesionales independientes' },
 ];
 
 export const RUBRO_LABEL: Record<string, string> = Object.fromEntries(RUBROS.map((r) => [r.value, r.label]));

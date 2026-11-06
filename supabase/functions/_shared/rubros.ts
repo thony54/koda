@@ -49,6 +49,24 @@ const GRUPOS: Record<string, string[]> = {
     'coworking', 'architect', 'notary', 'it', 'consulting', 'advertising_agency', 'inmobiliaria',
     'abogado', 'contador', 'estudio juridico', 'agencia', 'oficina',
   ],
+  // Los tres últimos corresponden a las plantillas Artista, Sublimados y Estándar de Connexo.
+  // Solo reciben categorías que antes no tenían grupo: no cambian cómo se clasifica lo ya existente.
+  musicos: [
+    'music_school', 'musical_instrument', 'music_store', 'recording_studio', 'musico', 'musicos', 'banda',
+    'grupo musical', 'dj', 'orquesta', 'mariachi', 'cantante', 'artista', 'escuela de musica',
+    'estudio de grabacion', 'tienda de instrumentos', 'productora musical',
+  ],
+  sublimados: [
+    'copyshop', 'printer', 'printing', 'print_shop', 'embroiderer', 'fabric', 'sublimacion', 'sublimados',
+    'serigrafia', 'estampados', 'bordados', 'imprenta', 'uniformes', 'textil', 'regalos personalizados',
+    'copiadora', 'rotulos', 'gigantografia',
+  ],
+  profesionales: [
+    'photographer', 'photographic_laboratory', 'psychotherapist', 'psychologist', 'therapist', 'coach', 'coaching',
+    'tutor', 'translator', 'nutritionist', 'fotografo', 'fotografia', 'estudio fotografico', 'psicologo',
+    'psicologa', 'nutricionista', 'traductor', 'diseno grafico', 'freelance', 'consultor', 'profesor particular',
+    'clases particulares', 'wedding_planner',
+  ],
 };
 
 const POR_VALOR = new Map<string, string>();

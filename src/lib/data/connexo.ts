@@ -200,6 +200,7 @@ const TABLA_LABEL: Record<string, [string, string]> = {
   hotel_rooms: ['habitación', 'habitaciones'], hotel_services: ['servicio del hotel', 'servicios del hotel'],
   realty_properties: ['propiedad', 'propiedades'], realty_agents: ['asesor', 'asesores'],
   barber_staff: ['persona del equipo', 'personas del equipo'], ecom_staff: ['persona del equipo', 'personas del equipo'],
+  sublima_products: ['producto de ejemplo', 'productos de ejemplo'],
 };
 
 /** Separa lo que viene del prospecto (KODA) de lo que es contenido de EJEMPLO del banco de recursos. */

@@ -67,6 +67,10 @@ export const RUBRO_TAGS: Record<string, string[]> = {
   tiendas: ['shop'],
   talleres: ['craft', 'amenity~"car_wash|car_rental|driving_school|internet_cafe"'],
   oficinas: ['office'],
+  // Plantillas Artista, Sublimados y Estándar de Connexo.
+  musicos: ['amenity~"music_school"', 'shop~"musical_instrument"', 'studio~"audio|music"'],
+  sublimados: ['shop~"copyshop|fabric"', 'craft~"printer|embroiderer"'],
+  profesionales: ['craft~"photographer|photographic_laboratory"', 'healthcare~"psychotherapist|counselling|nutrition_counselling"', 'office~"therapist|coaching|translator|photographer"'],
 };
 
 // Conjunto por defecto cuando el job no especifica rubros: todo lo anterior.

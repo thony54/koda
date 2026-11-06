@@ -4,6 +4,16 @@ import {
   type PasoRevision,
 } from '@/lib/data/connexo';
 
+/**
+ * Cada cambio de estado de un envío le enseña algo a KODA (migración 0014): se refresca lo que
+ * depende de la memoria y se despierta al pulso para que recalifique al instante.
+ */
+function refrescarAprendizaje(qc: ReturnType<typeof useQueryClient>) {
+  for (const k of ['mi-memoria', 'mi-resumen', 'mi-recientes', 'veredicto', 'para-ti', 'dashboard', 'koda-pendientes']) {
+    qc.invalidateQueries({ queryKey: [k] });
+  }
+}
+
 export function useEnvios(enabled = true) {
   return useQuery({ queryKey: ['connexo-envios'], queryFn: listEnvios, enabled });
 }
@@ -20,7 +30,10 @@ export function useRefrescarConnexo() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: refrescarEstadosConnexo,
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['connexo-envios'] }),
+    onSuccess: (r) => {
+      qc.invalidateQueries({ queryKey: ['connexo-envios'] });
+      if (r.actualizados) refrescarAprendizaje(qc);
+    },
   });
 }
 
@@ -46,6 +59,7 @@ export function useEnviarWhatsApp() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['connexo-envios'] });
       qc.invalidateQueries({ queryKey: ['connexo-wa-cupo'] });
+      refrescarAprendizaje(qc);
     },
   });
 }
@@ -57,6 +71,7 @@ export function useRevisarEnvios() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['connexo-envios'] });
       qc.invalidateQueries({ queryKey: ['connexo-detalle'] });
+      refrescarAprendizaje(qc);
     },
   });
 }

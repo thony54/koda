@@ -42,6 +42,8 @@ export interface Reciente {
   explicito: number | null;
   por_estado: number;
   por_actividad: number;
+  /** Respuesta del negocio en el puente con Connexo (solo la cuenta propietaria; 0 = nada). */
+  por_connexo: number;
   updated_at: string;
 }
 
@@ -49,7 +51,7 @@ export interface Reciente {
 export async function getRecientes(uid: string, limit = 8): Promise<Reciente[]> {
   const { data, error } = await db
     .from('koda_veredictos')
-    .select('id, nombre, aplicado, explicito, por_estado, por_actividad, updated_at')
+    .select('id, nombre, aplicado, explicito, por_estado, por_actividad, por_connexo, updated_at')
     .eq('owner_id', uid)
     .neq('aplicado', 0)
     .order('updated_at', { ascending: false })

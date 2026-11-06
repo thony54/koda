@@ -460,9 +460,13 @@ function ItemReciente({ r }: { r: Reciente }) {
   const favor = r.aplicado > 0;
   const motivo = r.explicito != null
     ? (r.explicito > 0 ? 'Lo marcaste como tu tipo' : 'Dijiste que no es para ti')
-    : r.por_estado !== 0
-      ? (r.por_estado > 0 ? 'Por el avance que le diste' : 'Lo descartaste')
-      : 'Por lo que hiciste con él (enlaces, asignación)';
+    : r.por_connexo !== 0 && Math.abs(r.por_connexo) >= Math.abs(r.por_estado)
+      ? (r.por_connexo >= 3 ? 'Aceptó la prueba en Connexo'
+        : r.por_connexo > 0 ? 'Avanzó en Connexo (aprobado o terminó su prueba)'
+        : 'No avanzó en Connexo (ver más tarde, sin respuesta o descartado)')
+      : r.por_estado !== 0
+        ? (r.por_estado > 0 ? 'Por el avance que le diste' : 'Lo descartaste')
+        : 'Por lo que hiciste con él (enlaces, asignación)';
   return (
     <li className="flex items-start gap-2.5">
       <span className={`mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-full ${favor ? 'bg-success/15 text-success' : 'bg-danger/15 text-danger'}`}>

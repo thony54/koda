@@ -4,6 +4,7 @@ import { CheckCheck, Loader2, MessageCircle, RefreshCw, Send, X } from 'lucide-r
 import { PageHeader, EmptyState } from '@/components/layout/PageHeader';
 import { Badge, Button, Modal, Table, THead, TBody, TR, TH, TD } from '@/components/ui';
 import { RevisionModal } from '@/components/connexo/RevisionModal';
+import { AprendizajeConnexo } from '@/components/connexo/AprendizajeConnexo';
 import {
   useCupoWhatsApp, useEnviarWhatsApp, useEnvios, useRefrescarConnexo, useRevisarEnvios,
 } from '@/hooks/useConnexo';
@@ -146,6 +147,8 @@ export default function Connexo() {
         />
       ) : (
         <>
+          <AprendizajeConnexo envios={envios} />
+
           <div className="mb-3 flex flex-wrap items-center gap-1.5 text-xs">
             <FiltroChip activo={filtro === 'todos'} onClick={() => setFiltro('todos')}>Todos · {envios.length}</FiltroChip>
             {(Object.keys(ESTADO_CONNEXO) as ConnexoEstado[]).filter((k) => conteo[k]).map((k) => (

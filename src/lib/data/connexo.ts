@@ -221,3 +221,41 @@ export function resumirRelleno(r: RellenoConnexo | null): { deKoda: string[]; de
   });
   return { deKoda: [...deKoda], deEjemplo: [...deEjemplo], tablas, enlaces: r?.enlaces ?? 0 };
 }
+
+// ── Lo que KODA aprende de las respuestas ───────────────────────────────────
+
+/** Estados de quien ya recibió la invitación por WhatsApp (ya hay una respuesta, o se espera). */
+export const ESTADOS_INVITADOS: ConnexoEstado[] = ['wa_enviado', 'aceptado', 'declinado', 'vencido'];
+
+export interface FilaRespuesta {
+  clave: string;
+  invitados: number;
+  aceptaron: number;
+  declinaron: number;
+  /** Aún sin respuesta o con la invitación/prueba vencida. */
+  otros: number;
+}
+
+/**
+ * Cuántos de los invitados aceptaron, agrupados por rubro o ciudad. Es lo mismo que KODA va
+ * aprendiendo en su memoria (migración 0014), pero a la vista: qué tipo de negocio responde.
+ */
+export function respuestasPor(
+  envios: Pick<ConnexoEnvio, 'estado' | 'rubro' | 'categoria' | 'prospect_ciudad'>[],
+  campo: 'rubro' | 'ciudad',
+): FilaRespuesta[] {
+  const filas = new Map<string, FilaRespuesta>();
+  for (const e of envios) {
+    if (!ESTADOS_INVITADOS.includes(e.estado)) continue;
+    const clave = ((campo === 'rubro' ? e.rubro ?? e.categoria : e.prospect_ciudad) ?? '').trim();
+    if (!clave) continue;
+    const f = filas.get(clave) ?? { clave, invitados: 0, aceptaron: 0, declinaron: 0, otros: 0 };
+    f.invitados += 1;
+    if (e.estado === 'aceptado') f.aceptaron += 1;
+    else if (e.estado === 'declinado') f.declinaron += 1;
+    else f.otros += 1;
+    filas.set(clave, f);
+  }
+  return [...filas.values()].sort((a, b) =>
+    b.aceptaron / b.invitados - a.aceptaron / a.invitados || b.invitados - a.invitados || a.clave.localeCompare(b.clave));
+}

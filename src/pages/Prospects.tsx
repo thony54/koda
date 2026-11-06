@@ -54,7 +54,7 @@ export default function Prospects() {
   const [page, setPage] = useState(1);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const toast = useUIStore((s) => s.toast);
-  const { can, isOwner, canConnexo } = useAuth();
+  const { can, isOwner } = useAuth();
   const canExport = can('exportar');
   const updateProspect = useUpdateProspect();
   const enviarAConnexo = useEnviarAConnexo();
@@ -169,7 +169,7 @@ export default function Prospects() {
           <div className="mx-1 h-4 w-px bg-line" />
           <button onClick={() => bulkStatus('calificado')} className="rounded px-2 py-1 text-ink-secondary hover:bg-veil/[0.08] hover:text-ink-primary">Marcar calificado</button>
           <button onClick={() => bulkStatus('descartado')} className="rounded px-2 py-1 text-ink-secondary hover:bg-veil/[0.08] hover:text-ink-primary">Descartar</button>
-          {canConnexo && (
+          {isOwner && (
             <button onClick={() => setConnexoOpen(true)} className="inline-flex items-center gap-1 rounded px-2 py-1 text-accent-text hover:bg-veil/[0.08]">
               <Send className="h-3.5 w-3.5" /> Enviar a Connexo
             </button>

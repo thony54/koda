@@ -50,7 +50,7 @@ export const navGroups: NavGroup[] = [
       { to: '/curaduria', label: 'Curaduría', icon: Sparkles, permiso: 'curaduria' },
       { to: '/mapa', label: 'Mapa', icon: Map, permiso: 'mapa' },
       { to: '/reportes', label: 'Reportes', icon: BarChart3, permiso: 'reportes' },
-      { to: '/connexo', label: 'Connexo', icon: Send, connexo: true },
+      { to: '/connexo', label: 'Connexo', icon: Send, propietario: true },
       { to: '/logs', label: 'Auditoría', icon: ScrollText, propietario: true },
     ],
   },

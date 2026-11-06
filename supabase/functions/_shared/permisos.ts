@@ -12,7 +12,6 @@ export const PERMISOS_VALIDOS = [
   'exportar',
   'eliminar',
   'discord',
-  'enviar_a_connexo',
 ] as const;
 
 export type Permiso = (typeof PERMISOS_VALIDOS)[number];

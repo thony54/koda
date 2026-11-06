@@ -238,7 +238,7 @@ export default function ProspectDetail() {
       {/* Nota trazabilidad */}
       <p className="num mt-6 text-[11px] text-ink-muted">
         Visto por primera vez {timeAgo(p.first_seen_at)} · última vez {timeAgo(p.last_seen_at)}.
-        {p.assigned_to ? '' : ' Sin asignar a Connexo Sellers.'}
+        {isOwner && !p.assigned_to ? ' Sin asignar a Connexo Sellers.' : ''}
       </p>
     </div>
   );

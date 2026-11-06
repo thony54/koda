@@ -11,6 +11,9 @@
 -- El navegador solo LEE esta tabla; escribe únicamente la Edge Function `koda-connexo`
 -- (service_role), que es la que habla con el puente de Connexo.
 --
+-- ⚠️ La regla de «quién puede enviar» de abajo quedó reemplazada por 0013_connexo_solo_propietario.sql
+-- (solo el propietario, sin permiso delegable). Si se vuelve a aplicar 0012, aplicar 0013 después.
+--
 -- Idempotente. Aplicar con (NO usar `db push`, ver koda-multiusuario):
 --   npx supabase db query --linked -f supabase/migrations/0012_connexo_puente.sql
 

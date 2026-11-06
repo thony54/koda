@@ -26,8 +26,7 @@ export type PermissionKey =
   | 'reportes'
   | 'exportar'
   | 'eliminar'
-  | 'discord'
-  | 'enviar_a_connexo';
+  | 'discord';
 
 export type ProspectType =
   | 'negocio_local'

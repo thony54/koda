@@ -4,8 +4,8 @@
 // habla con Connexo, y lo hace con un secreto compartido (`x-koda-secret`) contra la función
 // `kodaIntake` de Connexo: KODA nunca guarda la service_role de Connexo.
 //
-// Quién puede usarla: la cuenta propietaria o quien tenga el permiso `enviar_a_connexo`
-// (ver can_send_connexo() en 0012). No la llama el cron.
+// Quién puede usarla: SOLO la cuenta propietaria (connexoec). No hay permiso para delegarlo
+// (ver can_send_connexo() en 0013). No la llama el cron.
 //
 // Acciones:
 //   { action: 'enviar', prospect_ids: string[] }  → arma el borrador de cada prospecto en Connexo
@@ -133,8 +133,8 @@ Deno.serve(async (req) => {
 
   try {
     const caller: Caller = await requireCaller(req, admin);
-    if (caller.isCron || !(caller.esPropietario || caller.permisos.includes('enviar_a_connexo'))) {
-      return json({ error: 'No tienes habilitado enviar prospectos a Connexo. Pídeselo al propietario de KODA.' }, 403);
+    if (caller.isCron || !caller.esPropietario) {
+      return json({ error: 'Esta función es solo de la cuenta propietaria de KODA.' }, 403);
     }
     const body = await req.json().catch(() => ({} as Json));
 

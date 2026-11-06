@@ -35,8 +35,6 @@ export const PERMISSIONS: PermissionDef[] = [
     description: 'Ver reportes y estadísticas de sus prospectos.' },
   { key: 'discord', label: 'Discord', group: 'Integraciones',
     description: 'Recibir avisos en sus propios canales de Discord.' },
-  { key: 'enviar_a_connexo', label: 'Enviar a Connexo', group: 'Integraciones',
-    description: 'Pasar prospectos a Connexo Clients para armar su perfil de prueba. Usa el WhatsApp y el tope diario de Connexo.' },
 ];
 
 export const ALL_PERMISSION_KEYS: PermissionKey[] = PERMISSIONS.map((p) => p.key);
@@ -48,8 +46,8 @@ export const PERMISSION_PRESETS: { id: string; label: string; hint: string; perm
   {
     id: 'completo',
     label: 'Completo',
-    hint: 'Todas las funciones, incluida Google Places (menos Enviar a Connexo, que se da aparte)',
-    permisos: ALL_PERMISSION_KEYS.filter((k) => k !== 'enviar_a_connexo'),
+    hint: 'Todas las funciones, incluida Google Places',
+    permisos: ALL_PERMISSION_KEYS,
   },
   {
     id: 'prospeccion',
@@ -73,30 +71,21 @@ export function hasPermission(profile: Profile | null | undefined, key?: Permiss
 }
 
 /**
- * ¿Puede enviar prospectos a Connexo? Solo la cuenta propietaria, o quien ella habilite con
- * `enviar_a_connexo`. A diferencia de las demás funciones, un super_admin que no es propietario
- * NO lo tiene por defecto (gasta el WhatsApp y el tope diario de Connexo). Misma regla que
- * `can_send_connexo()` en la base y que `koda-connexo`.
+ * Regla de acceso de una pantalla/ítem de menú: rol permitido Y función habilitada.
+ *
+ * Todo lo que tiene que ver con Connexo (el puente, los envíos, el WhatsApp, los planes) es SOLO
+ * de la cuenta propietaria: se marca con `propietario`. No existe un permiso para delegarlo.
  */
-export function canSendToConnexo(profile: Profile | null | undefined): boolean {
-  if (!profile?.activo) return false;
-  return profile.es_propietario || (profile.permisos ?? []).includes('enviar_a_connexo');
-}
-
-/** Regla de acceso de una pantalla/ítem de menú: rol permitido Y función habilitada. */
 export interface AccessRule {
   roles?: UserRole[];
   permiso?: PermissionKey;
-  /** Pantalla reservada a la cuenta propietaria (administración y configuración global). */
+  /** Pantalla reservada a la cuenta propietaria (administración, configuración global y Connexo). */
   propietario?: boolean;
-  /** Pantalla del puente con Connexo: propietario o quien tenga `enviar_a_connexo`. */
-  connexo?: boolean;
 }
 
 export function canAccess(profile: Profile | null | undefined, rule: AccessRule): boolean {
   if (!profile?.activo) return false;
   if (rule.propietario && !profile.es_propietario) return false;
-  if (rule.connexo && !canSendToConnexo(profile)) return false;
   if (rule.roles?.length && !rule.roles.includes(profile.rol)) return false;
   return hasPermission(profile, rule.permiso);
 }

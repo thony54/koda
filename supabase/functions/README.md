@@ -159,8 +159,8 @@ La retención se agenda sola desde `0005`.
 ## Puente con Connexo Clients (`koda-connexo`)
 
 Envía prospectos a Connexo Clients (otro proyecto Supabase) para que arme su perfil borrador.
-Solo la cuenta propietaria o quien tenga el permiso `enviar_a_connexo`. Requiere la migración
-`0012_connexo_puente.sql` y estos Secrets (los mismos valores que `KODA_BRIDGE_SECRET` en Connexo):
+Solo la cuenta propietaria (no se puede delegar). Requiere las migraciones
+`0012_connexo_puente.sql` y `0013_connexo_solo_propietario.sql`, y estos Secrets (los mismos valores que `KODA_BRIDGE_SECRET` en Connexo):
 
 ```bash
 npx supabase secrets set CONNEXO_BRIDGE_URL=https://<ref-de-connexo>.supabase.co/functions/v1/kodaIntake

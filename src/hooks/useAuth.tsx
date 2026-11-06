@@ -8,7 +8,7 @@ import {
 import type { Session } from '@supabase/supabase-js';
 import { supabase, supabaseConfigured } from '@/lib/supabase';
 import { queryClient } from '@/lib/queryClient';
-import { canSendToConnexo, hasPermission } from '@/lib/permissions';
+import { hasPermission } from '@/lib/permissions';
 import { useScopeStore } from '@/store/scopeStore';
 import type { PermissionKey, Profile } from '@/types/database';
 
@@ -25,8 +25,6 @@ interface AuthContextValue {
   isOwner: boolean;
   /** ¿Tiene esta función habilitada? (Super Admin: siempre.) Sin clave: solo "activo". */
   can: (permiso?: PermissionKey) => boolean;
-  /** ¿Puede enviar prospectos a Connexo? Solo el propietario o quien tenga `enviar_a_connexo`. */
-  canConnexo: boolean;
   /** true cuando NO hay Supabase configurado (falta .env.local). */
   notConfigured: boolean;
   signIn: (email: string, password: string) => Promise<{ error: string | null }>;
@@ -147,7 +145,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const isSuperAdmin = Boolean(profile?.activo && profile.rol === 'super_admin');
   const isOwner = Boolean(profile?.activo && profile.es_propietario);
   const can = (permiso?: PermissionKey) => hasPermission(profile, permiso);
-  const canConnexo = canSendToConnexo(profile);
 
   return (
     <AuthContext.Provider
@@ -159,7 +156,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         isSuperAdmin,
         isOwner,
         can,
-        canConnexo,
         notConfigured: !supabaseConfigured,
         signIn,
         signOut,

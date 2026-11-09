@@ -252,7 +252,7 @@ Deno.serve(async (req) => {
         const c = contactos.get(p.id) ?? {};
         const jobId = jobDe.get(p.id) ?? null;
         const busqueda = jobId ? (nombreJob.get(jobId) ?? null) : null;
-        const rubro = rubroDe(p.categoria);
+        const rubro = rubroDe(p.categoria, p.nombre);
         const d = dueno.get(p.owner_id);
         const ahora = new Date().toISOString();
 

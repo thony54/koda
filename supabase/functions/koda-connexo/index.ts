@@ -27,6 +27,10 @@ import { rubroDe } from '../_shared/rubros.ts';
 
 const VERSION_CONTRATO = 1;
 const MAX_POR_LLAMADA = 50;
+// «enviar» y «revision» hacen UNA llamada a Connexo por negocio dentro de la misma ejecución, y Supabase corta con
+// «Rate limit exceeded for trace» pasadas ~30 llamadas encadenadas (se vio con 50: 30 salieron y 20 fallaron).
+// La pantalla manda en tandas de 25; el WhatsApp es una sola llamada y admite 50.
+const MAX_TANDA_PUENTE = 25;
 const CONCURRENCIA = 3;
 const TIMEOUT_MS = 30_000;
 // Enviar hasta 50 WhatsApp toma más (Meta responde ~0,5 s por mensaje, 3 en paralelo).
@@ -186,7 +190,7 @@ Deno.serve(async (req) => {
         pedidos.filter((x): x is string => typeof x === 'string' && UUID_RE.test(x)),
       )];
       if (!ids.length) return json({ error: 'No elegiste ningún prospecto.' }, 400);
-      if (ids.length > MAX_POR_LLAMADA) return json({ error: `Envía como máximo ${MAX_POR_LLAMADA} prospectos por vez.` }, 400);
+      if (ids.length > MAX_TANDA_PUENTE) return json({ error: `Envía como máximo ${MAX_TANDA_PUENTE} prospectos por vez.` }, 400);
       if (!Deno.env.get('CONNEXO_BRIDGE_URL') || !Deno.env.get('CONNEXO_BRIDGE_SECRET')) {
         return json({ error: new PuenteSinConfigurar().message }, 503);
       }
@@ -347,7 +351,7 @@ Deno.serve(async (req) => {
       const pedidos: unknown[] = Array.isArray(body.envio_ids) ? body.envio_ids : [body.envio_id];
       const ids: string[] = [...new Set(pedidos.filter((x): x is string => typeof x === 'string' && UUID_RE.test(x)))];
       if (!ids.length) return json({ error: 'No elegiste ningún negocio.' }, 400);
-      if (ids.length > MAX_POR_LLAMADA) return json({ error: `Elige como máximo ${MAX_POR_LLAMADA} negocios por vez.` }, 400);
+      if (ids.length > MAX_TANDA_PUENTE) return json({ error: `Elige como máximo ${MAX_TANDA_PUENTE} negocios por vez.` }, 400);
       if (!puenteConfigurado()) return json({ error: new PuenteSinConfigurar().message }, 503);
 
       let q = admin.from('connexo_envios').select('id, prospect_nombre, estado').in('id', ids);

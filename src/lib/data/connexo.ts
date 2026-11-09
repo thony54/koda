@@ -77,8 +77,26 @@ export interface ResultadoEnvio {
   theme?: string | null;
 }
 
+/**
+ * La función de KODA llama a Connexo una vez por negocio dentro de la misma ejecución y Supabase corta pasadas ~30
+ * llamadas encadenadas («Rate limit exceeded for trace»), así que se manda en tandas de 25 una tras otra.
+ */
+const TANDA_PUENTE = 25;
+const enTandas = <T,>(xs: T[]): T[][] => {
+  const out: T[][] = [];
+  for (let i = 0; i < xs.length; i += TANDA_PUENTE) out.push(xs.slice(i, i + TANDA_PUENTE));
+  return out;
+};
+
 export async function enviarAConnexo(prospectIds: string[]): Promise<{ enviados: number; resultados: ResultadoEnvio[] }> {
-  return invokeConnexo({ action: 'enviar', prospect_ids: prospectIds });
+  let enviados = 0;
+  const resultados: ResultadoEnvio[] = [];
+  for (const tanda of enTandas(prospectIds)) {
+    const r = await invokeConnexo<{ enviados: number; resultados: ResultadoEnvio[] }>({ action: 'enviar', prospect_ids: tanda });
+    enviados += r.enviados;
+    resultados.push(...r.resultados);
+  }
+  return { enviados, resultados };
 }
 
 /** Pregunta a Connexo cómo van los envíos y actualiza el espejo local. */
@@ -128,7 +146,12 @@ export interface ResultadoRevision {
 
 /** Aprueba, devuelve, descarta o restaura uno o varios negocios. Connexo valida cada paso. */
 export async function revisarEnvios(ids: string[], paso: PasoRevision): Promise<{ resultados: ResultadoRevision[] }> {
-  return invokeConnexo({ action: 'revision', envio_ids: ids, paso });
+  const resultados: ResultadoRevision[] = [];
+  for (const tanda of enTandas(ids)) {
+    const r = await invokeConnexo<{ resultados: ResultadoRevision[] }>({ action: 'revision', envio_ids: tanda, paso });
+    resultados.push(...r.resultados);
+  }
+  return { resultados };
 }
 
 export type OrigenDato = 'koda' | 'banco' | 'mixto';

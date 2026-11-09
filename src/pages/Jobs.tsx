@@ -32,6 +32,7 @@ const RUBROS: { value: string; label: string }[] = [
   { value: 'oficinas', label: 'Oficinas y profesionales' },
   { value: 'musicos', label: 'Músicos y artistas' },
   { value: 'sublimados', label: 'Sublimados e imprentas' },
+  { value: 'librerias', label: 'Librerías' },
   { value: 'profesionales', label: 'Profesionales independientes' },
 ];
 const RUBRO_LABEL = Object.fromEntries(RUBROS.map((r) => [r.value, r.label]));

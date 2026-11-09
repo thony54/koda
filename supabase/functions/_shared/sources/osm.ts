@@ -70,6 +70,7 @@ export const RUBRO_TAGS: Record<string, string[]> = {
   // Plantillas Artista, Sublimados y Estándar de Connexo.
   musicos: ['amenity~"music_school"', 'shop~"musical_instrument"', 'studio~"audio|music"'],
   sublimados: ['shop~"copyshop|fabric"', 'craft~"printer|embroiderer"'],
+  librerias: ['shop~"books"'],   // plantilla Librería de Connexo (themes books)
   profesionales: ['craft~"photographer|photographic_laboratory"', 'healthcare~"psychotherapist|counselling|nutrition_counselling"', 'office~"therapist|coaching|translator|photographer"'],
 };
 

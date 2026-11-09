@@ -38,10 +38,10 @@ const GRUPOS: Record<string, string[]> = {
   ],
   tiendas: [
     'supermarket', 'convenience', 'clothes', 'shoes', 'bakery', 'butcher', 'florist', 'jewelry',
-    'mobile_phone', 'electronics', 'furniture', 'hardware', 'books', 'gift', 'toys',
+    'mobile_phone', 'electronics', 'furniture', 'hardware', 'gift', 'toys',
     'department_store', 'mall', 'variety_store', 'bag', 'boutique', 'kiosk', 'bicycle', 'sports',
     'greengrocer', 'alcohol', 'pet', 'stationery', 'computer', 'tienda', 'tienda online',
-    'ferreteria', 'libreria', 'panaderia', 'supermercado', 'ropa', 'zapateria', 'joyeria',
+    'ferreteria', 'panaderia', 'supermercado', 'ropa', 'zapateria', 'joyeria',
     'floristeria', 'carniceria', 'minimarket',
   ],
   talleres: [
@@ -67,6 +67,10 @@ const GRUPOS: Record<string, string[]> = {
     'serigrafia', 'estampados', 'bordados', 'imprenta', 'uniformes', 'textil', 'regalos personalizados',
     'copiadora', 'rotulos', 'gigantografia',
   ],
+  // Plantilla Librería de Connexo (books). Antes «books» y «libreria» caían en tiendas (plantilla Ecommerce): ya no.
+  librerias: [
+    'book_store', 'bookstore', 'book_shop', 'books', 'libreria', 'librerias', 'libros', 'libreria papeleria',
+  ],
   profesionales: [
     'photographer', 'photographic_laboratory', 'psychotherapist', 'psychologist', 'therapist', 'coach', 'coaching',
     'tutor', 'translator', 'nutritionist', 'fotografo', 'fotografia', 'estudio fotografico', 'psicologo',
@@ -90,6 +94,7 @@ const ES_TIENDA = /(^| )store$/;
 // categoría no se reconoció. El orden importa: gana la primera que coincide.
 const PISTAS_DE_NOMBRE: [string, RegExp][] = [
   ['sublimados', /imprent|print|sublim|serigraf|estampad|gigantograf|rotulo|copiad|bordad/],
+  ['librerias', /libreria|\blibros\b|bookstore|bookshop/],
   ['musicos', /\bmusic|sonido|grabacion|mariachi|orquesta|\bdj\b/],
   ['profesionales', /fotograf|psicolog|nutricion|\bcoach\b/],
   ['belleza', /barber|peluquer|salon de belleza|centro de estetica|\bnails?\b|manicur|\bspa\b/],
@@ -104,16 +109,14 @@ const PISTAS_DE_NOMBRE: [string, RegExp][] = [
  * Grupo de rubro de una categoría (OSM / Google / texto libre), o null si no se reconoce.
  * Si se pasa el `nombre` del negocio, se usa como respaldo cuando la categoría es genérica.
  *
- * Las librerías («book_store») NO caen en «tiendas» a propósito: tienen su propia plantilla en Connexo y,
- * hasta que KODA tenga su rubro, mandarlas con la de tienda genérica no tendría sentido (regla: a cada
- * negocio, la plantilla de su nicho). Se quedan sin rubro y no se envían.
+ * Las librerías («book_store», «books»…) tienen su propio rubro (`librerias` → plantilla Librería de Connexo) y
+ * NO caen en «tiendas»: a cada negocio, la plantilla de su nicho.
  */
 export function rubroDe(categoria: string | null | undefined, nombre?: string | null): string | null {
   if (categoria) {
     const n = norm(categoria);
     const directo = POR_VALOR.get(n);
     if (directo) return directo;
-    if (n.includes('book')) return null;
     if (ES_RESTAURANTE.test(n)) return 'restaurantes';
     if (ES_TIENDA.test(n)) return 'tiendas';
   }

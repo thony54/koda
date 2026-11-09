@@ -16,6 +16,7 @@ export const RUBROS: { value: string; label: string }[] = [
   { value: 'oficinas', label: 'Oficinas y profesionales' },
   { value: 'musicos', label: 'Músicos y artistas' },
   { value: 'sublimados', label: 'Sublimados e imprentas' },
+  { value: 'librerias', label: 'Librerías' },
   { value: 'profesionales', label: 'Profesionales independientes' },
 ];
 

@@ -203,7 +203,7 @@ export const falloWhatsApp = (e: Pick<ConnexoEnvio, 'estado' | 'detalle'>): bool
 
 export const PLANTILLA_CONNEXO: Record<string, string> = {
   default: 'Estándar', barber: 'Barbería', gastro: 'Gastronomía', petcare: 'Mascotas', medical: 'Salud',
-  ecom: 'Ecommerce', stage: 'Artista', realty: 'Inmobiliaria', sublima: 'Sublimados', gym: 'Gimnasio', hotel: 'Hotel',
+  ecom: 'Ecommerce', stage: 'Artista', realty: 'Inmobiliaria', sublima: 'Sublimados', gym: 'Gimnasio', hotel: 'Hotel', books: 'Librería',
 };
 
 // Campos del perfil de Connexo → cómo se le muestra a quien revisa. Lo que no está aquí no se lista.
@@ -224,6 +224,7 @@ const TABLA_LABEL: Record<string, [string, string]> = {
   realty_properties: ['propiedad', 'propiedades'], realty_agents: ['asesor', 'asesores'],
   barber_staff: ['persona del equipo', 'personas del equipo'], ecom_staff: ['persona del equipo', 'personas del equipo'],
   sublima_products: ['producto de ejemplo', 'productos de ejemplo'],
+  books_titles: ['libro de ejemplo', 'libros de ejemplo'],
 };
 
 /** Separa lo que viene del prospecto (KODA) de lo que es contenido de EJEMPLO del banco de recursos. */

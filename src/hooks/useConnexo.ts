@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
-  cupoWhatsApp, detalleEnvio, enviarAConnexo, enviarWhatsApp, listEnvios, listLotes, refrescarEstadosConnexo,
+  cupoWhatsApp, detalleEnvio, enviarAConnexo, enviarWhatsApp, listEnvios, listLoteDeProspectos, listLotes, refrescarEstadosConnexo,
   renombrarLote, revisarEnvios, vistaPreviaEnvio,
   type PasoRevision,
 } from '@/lib/data/connexo';
@@ -21,6 +21,11 @@ export function useEnvios(enabled = true) {
 
 export function useLotes(enabled = true) {
   return useQuery({ queryKey: ['connexo-lotes'], queryFn: listLotes, enabled });
+}
+
+/** Lote de cada prospecto ya enviado a Connexo (para filtrar el mapa por lote). */
+export function useLoteDeProspectos(enabled = true) {
+  return useQuery({ queryKey: ['connexo-lote-prospectos'], queryFn: listLoteDeProspectos, enabled });
 }
 
 /** Qué saldría en el lote y por qué se omite el resto. Se pide al abrir el armado del lote; no envía nada. */
@@ -57,6 +62,7 @@ export function useEnviarAConnexo() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['connexo-envios'] });
       qc.invalidateQueries({ queryKey: ['connexo-lotes'] });
+      qc.invalidateQueries({ queryKey: ['connexo-lote-prospectos'] });
       refrescarListaProspectos(qc);
     },
   });

@@ -9,6 +9,9 @@ import '@/styles/map.css';
 import { PageHeader, EmptyState } from '@/components/layout/PageHeader';
 import { Card } from '@/components/ui';
 import { getMapPoints, type MapPoint } from '@/lib/data/prospects';
+import { etiquetaLote } from '@/lib/data/connexo';
+import { useLoteDeProspectos, useLotes } from '@/hooks/useConnexo';
+import { useAuth } from '@/hooks/useAuth';
 import { bandForScore, type ScoreBand } from '@/components/prospects/ScoreBadge';
 import { BAND_META } from '@/lib/scoring';
 import { useUIStore } from '@/store/uiStore';
@@ -57,7 +60,13 @@ export default function MapPage() {
   const { data: points, isLoading } = useQuery({ queryKey: ['map-points'], queryFn: getMapPoints });
   const navigate = useNavigate();
   const theme = useUIStore((s) => s.theme);
+  const { isOwner } = useAuth();
+  // Los lotes son de Connexo, que solo ve la cuenta propietaria.
+  const { data: lotes } = useLotes(isOwner);
+  const { data: loteDe } = useLoteDeProspectos(isOwner);
   const [city, setCity] = useState<string>('todas');
+  // 'todos' | 'sin' (aún no enviados a Connexo) | id de un lote
+  const [loteElegido, setLoteElegido] = useState<string>('todos');
   const [hidden, setHidden] = useState<Set<ScoreBand>>(new Set());
 
   // Los colores dependen del tema (en claro las bandas son más profundas).
@@ -72,14 +81,35 @@ export default function MapPage() {
     () => (points ?? []).filter((p) => city === 'todas' || p.ciudad === city),
     [points, city],
   );
+
+  // Lotes con algo a la vista (si el super admin mira a otro usuario, los demás no aplican) y cuántos puntos del mapa
+  // tiene cada uno en la ciudad elegida.
+  const opcionesLote = useMemo(() => {
+    if (!isOwner || !loteDe || !lotes) return [];
+    const enUso = new Set(Object.values(loteDe));
+    const n = new Map<string, number>();
+    for (const p of inCity) { const l = loteDe[p.id]; if (l) n.set(l, (n.get(l) ?? 0) + 1); }
+    return lotes.filter((l) => enUso.has(l.id)).map((l) => ({ id: l.id, label: `${etiquetaLote(l)} (${n.get(l.id) ?? 0})` }));
+  }, [isOwner, loteDe, lotes, inCity]);
+  const sinEnviar = useMemo(() => inCity.filter((p) => !loteDe?.[p.id]).length, [inCity, loteDe]);
+  const mostrarLotes = opcionesLote.length > 0;
+  // Si el lote elegido ya no está disponible (cambió el usuario que se mira), se vuelve a «todos».
+  const lote = loteElegido === 'todos' || loteElegido === 'sin' || opcionesLote.some((o) => o.id === loteElegido) ? loteElegido : 'todos';
+  const inScope = useMemo(
+    () => (!mostrarLotes || lote === 'todos'
+      ? inCity
+      : inCity.filter((p) => (lote === 'sin' ? !loteDe?.[p.id] : loteDe?.[p.id] === lote))),
+    [inCity, mostrarLotes, lote, loteDe],
+  );
+
   const counts = useMemo(() => {
     const c: Record<ScoreBand, number> = { hot: 0, good: 0, warm: 0, cold: 0 };
-    inCity.forEach((p) => { c[bandForScore(p.score)]++; });
+    inScope.forEach((p) => { c[bandForScore(p.score)]++; });
     return c;
-  }, [inCity]);
+  }, [inScope]);
   const visible = useMemo(
-    () => inCity.filter((p) => !hidden.has(bandForScore(p.score))),
-    [inCity, hidden],
+    () => inScope.filter((p) => !hidden.has(bandForScore(p.score))),
+    [inScope, hidden],
   );
   const coords = useMemo<[number, number][]>(() => visible.map((p) => [p.lat, p.lng]), [visible]);
 
@@ -97,16 +127,30 @@ export default function MapPage() {
       <PageHeader
         eyebrow="Geolocalización"
         title="Mapa"
-        description="Prospectos sobre el mapa, con color por banda de score."
+        description={`Prospectos sobre el mapa, con color por banda de score.${mostrarLotes ? ' Filtra por ciudad o por lote de Connexo.' : ''}`}
         actions={
-          <select
-            value={city}
-            onChange={(e) => setCity(e.target.value)}
-            className="glass-input h-9 cursor-pointer appearance-none rounded-md px-3 text-[13px] text-ink-primary outline-none"
-            aria-label="Ciudad"
-          >
-            {cities.map((c) => <option key={c} value={c}>{c === 'todas' ? 'Todas las ciudades' : c}</option>)}
-          </select>
+          <div className="flex flex-wrap items-center gap-2">
+            {mostrarLotes && (
+              <select
+                value={lote}
+                onChange={(e) => setLoteElegido(e.target.value)}
+                className="glass-input h-9 max-w-[18rem] cursor-pointer appearance-none rounded-md px-3 text-[13px] text-ink-primary outline-none"
+                aria-label="Lote de Connexo"
+              >
+                <option value="todos">Todos los lotes</option>
+                {opcionesLote.map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}
+                <option value="sin">Sin enviar a Connexo ({sinEnviar})</option>
+              </select>
+            )}
+            <select
+              value={city}
+              onChange={(e) => setCity(e.target.value)}
+              className="glass-input h-9 cursor-pointer appearance-none rounded-md px-3 text-[13px] text-ink-primary outline-none"
+              aria-label="Ciudad"
+            >
+              {cities.map((c) => <option key={c} value={c}>{c === 'todas' ? 'Todas las ciudades' : c}</option>)}
+            </select>
+          </div>
         }
       />
 
@@ -149,11 +193,18 @@ export default function MapPage() {
               );
             })}
             <span className="num ml-auto text-xs text-ink-muted">
-              {visible.length} de {inCity.length} prospectos
+              {visible.length} de {inScope.length} prospectos
             </span>
           </div>
 
-          <div className="h-[min(62vh,620px)] min-h-[380px] w-full">
+          <div className="relative h-[min(62vh,620px)] min-h-[380px] w-full">
+            {visible.length === 0 && (
+              <div className="pointer-events-none absolute inset-0 z-[1000] grid place-items-center p-6">
+                <p className="rounded-md border border-line-strong bg-surface-raised/95 px-4 py-2.5 text-[13px] text-ink-secondary shadow-lg">
+                  Ningún prospecto con coordenadas coincide con estos filtros.
+                </p>
+              </div>
+            )}
             <MapContainer
               center={QUITO}
               zoom={7}

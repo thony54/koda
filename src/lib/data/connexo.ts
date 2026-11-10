@@ -111,6 +111,29 @@ export async function listLotes(): Promise<ConnexoLote[]> {
   return (data ?? []) as ConnexoLote[];
 }
 
+/**
+ * En qué lote está cada prospecto (`prospect_id → lote_id`), solo los que ya se mandaron a Connexo. Es lo que usa el mapa
+ * para filtrar por lote. La API entrega 1000 filas por consulta, así que se pide por páginas.
+ */
+export async function listLoteDeProspectos(): Promise<Record<string, string>> {
+  const PAGINA = 1000;
+  const out: Record<string, string> = {};
+  for (let desde = 0; ; desde += PAGINA) {
+    const { data, error } = await byOwner(
+      db.from('connexo_envios')
+        .select('prospect_id, lote_id')
+        .not('prospect_id', 'is', null)
+        .not('lote_id', 'is', null)
+        .order('id')
+        .range(desde, desde + PAGINA - 1),
+    );
+    if (error) throw new Error(error.message);
+    const filas = (data ?? []) as { prospect_id: string; lote_id: string }[];
+    for (const f of filas) out[f.prospect_id] = f.lote_id;
+    if (filas.length < PAGINA) return out;
+  }
+}
+
 export async function renombrarLote(loteId: string, nombre: string): Promise<void> {
   await invokeConnexo({ action: 'lote_renombrar', lote_id: loteId, nombre });
 }

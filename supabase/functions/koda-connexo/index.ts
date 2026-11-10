@@ -17,6 +17,10 @@
 //   { action: 'detalle', envio_id }               → qué se llenó, de dónde salió cada dato y el enlace de vista previa
 //   { action: 'whatsapp_cupo' }                   → cuántos WhatsApp quedan hoy (ventana de 24 h)
 //   { action: 'whatsapp_enviar', envio_ids }      → manda el saludo inicial por WhatsApp a los APROBADOS (lo envía Connexo)
+//   { action: 'wa_responder', conversacion_id, texto, client_id, reintentar_id?, responde_a?, forzar? }
+//                                                  → BANDEJA: responde con texto libre dentro de la ventana de 24 h (migración 0016)
+//   { action: 'wa_media', mensaje_id }            → BANDEJA: baja y guarda el archivo de un mensaje que aún no se guardó
+//   { action: 'wa_importar_saludos' }             → BANDEJA: trae los saludos que Connexo ya había enviado, para que los chats los muestren
 //
 // Opcional: CONNEXO_PUBLIC_URL (por defecto https://www.connexoapp.com) para armar el enlace a la vista previa.
 //
@@ -30,6 +34,9 @@ import { rubroDe } from '../_shared/rubros.ts';
 import {
   celularEC, ESTADOS_CONTACTADOS, evaluarEnvio, saludoYaEnviado, type EnvioRegistrado,
 } from '../_shared/connexoEnvio.ts';
+import { guardarArchivo, registrarRespuestasPasadas, registrarSaludos, type BandejaDb } from '../_shared/waBandeja.ts';
+import { responderDesdeBandeja } from '../_shared/waResponder.ts';
+import { llamarWa } from '../_shared/connexoWa.ts';
 
 const VERSION_CONTRATO = 1;
 const MAX_POR_LLAMADA = 50;
@@ -602,6 +609,64 @@ Deno.serve(async (req) => {
         },
       });
       return json({ ok: true, enviados, resultados, cupo });
+    }
+
+    // ── BANDEJA: responder con texto libre (ventana de 24 h) ──────────────
+    if (body?.action === 'wa_responder') {
+      const conv = body.conversacion_id;
+      if (typeof conv !== 'string' || !UUID_RE.test(conv)) return json({ error: 'conversacion_id inválido.' }, 400);
+      const tipo = ['image', 'audio', 'video', 'document'].includes(body.tipo) ? body.tipo : 'text';
+      // El pie de un archivo es opcional; un mensaje de texto exige texto.
+      if (tipo === 'text' && typeof body.texto !== 'string') return json({ error: 'Escribe un mensaje.' }, 400);
+      if (typeof body.client_id !== 'string') return json({ error: 'Falta el identificador del envío.' }, 400);
+      const m = body.media && typeof body.media === 'object' ? body.media : null;
+      const media = tipo !== 'text' && m
+        ? { path: String(m.path ?? ''), mime: String(m.mime ?? ''), nombre: typeof m.nombre === 'string' ? m.nombre.slice(0, 120) : null,
+            bytes: typeof m.bytes === 'number' ? m.bytes : null, voz: m.voz === true }
+        : null;
+      const reintentar = typeof body.reintentar_id === 'string' && UUID_RE.test(body.reintentar_id) ? body.reintentar_id : null;
+      if (!puenteConfigurado()) return json({ error: new PuenteSinConfigurar().message }, 503);
+      const r = await responderDesdeBandeja(admin as unknown as BandejaDb, llamarWa, {
+        conversacion_id: conv,
+        texto: typeof body.texto === 'string' ? body.texto : '',
+        tipo,
+        media,
+        client_id: body.client_id,
+        reintentar_id: reintentar,
+        responde_a: typeof body.responde_a === 'string' ? body.responde_a.slice(0, 200) : null,
+        forzar: body.forzar === true,
+        usuario: caller.id,
+      });
+      return json(r);
+    }
+
+    // ── BANDEJA: bajar y guardar el archivo de un mensaje (reintento manual) ──
+    if (body?.action === 'wa_media') {
+      const id = body.mensaje_id;
+      if (typeof id !== 'string' || !UUID_RE.test(id)) return json({ error: 'mensaje_id inválido.' }, 400);
+      if (!puenteConfigurado()) return json({ error: new PuenteSinConfigurar().message }, 503);
+      const { data: m, error: mErr } = await admin.from('wa_mensajes').select('id, conversacion_id, media').eq('id', id).maybeSingle();
+      if (mErr) return json({ error: mErr.message }, 500);
+      if (!m) return json({ error: 'No encontré ese mensaje.' }, 404);
+      if (!m.media?.id) return json({ error: 'Ese mensaje no tiene archivo.' }, 400);
+      if (m.media.estado === 'guardado' && m.media.path) return json({ ok: true, path: m.media.path });
+      const r = await guardarArchivo(admin as unknown as BandejaDb, llamarWa, {
+        mensajeId: m.id, conversacionId: m.conversacion_id, mediaId: String(m.media.id), mime: m.media.mime ?? null,
+      });
+      return json(r);
+    }
+
+    // ── BANDEJA: traer los saludos que Connexo ya había enviado ───────────
+    if (body?.action === 'wa_importar_saludos') {
+      if (!puenteConfigurado()) return json({ error: new PuenteSinConfigurar().message }, 503);
+      const r = await llamarWa({ action: 'historial_saludos' }, 60_000);
+      const items = Array.isArray(r.items) ? r.items : [];
+      const db = admin as unknown as BandejaDb;
+      const res = await registrarSaludos(db, items);
+      // Lo que ya habían respondido por botón antes de la bandeja (con su hora): da contexto y abre la ventana de 24 h si es reciente.
+      const respuestas = Array.isArray(r.respuestas) ? r.respuestas : [];
+      const resp = await registrarRespuestasPasadas(db, respuestas);
+      return json({ ok: true, total: items.length, ...res, respuestas: resp });
     }
 
     return json({ error: 'Acción desconocida.' }, 400);

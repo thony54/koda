@@ -170,3 +170,18 @@ npx supabase functions deploy koda-connexo
 
 Del lado de Connexo: `supabase secrets set KODA_BRIDGE_SECRET=<el mismo valor>` y
 `supabase functions deploy kodaIntake --no-verify-jwt`. KODA nunca guarda la service_role de Connexo.
+
+## Bandeja de WhatsApp de Connexo (migración 0016)
+
+Pantalla `/bandeja` (solo el propietario) con los chats del número de Connexo en tiempo real.
+
+| Pieza | Qué hace |
+|---|---|
+| `koda-wa-inbox` | La llama SOLO Connexo (`kodaWhatsApp`) con `x-koda-secret` (= `CONNEXO_BRIDGE_SECRET`, `verify_jwt = false`). Guarda mensajes y avisos de estado del webhook de Meta, y los saludos enviados. Baja los archivos en segundo plano al bucket privado `wa-media`. |
+| `koda-connexo` → `wa_responder` | Responde con texto libre (ventana de 24 h). Registra «enviando», llama a `kodaWhatsApp.responder` y guarda el id de Meta. Idempotente por `client_id`. |
+| `koda-connexo` → `wa_media` / `wa_importar_saludos` | Reintento manual de un archivo / trae los saludos ya enviados. |
+| `_shared/waBandeja.ts`, `waResponder.ts`, `connexoWa.ts` | Lógica pura (se prueba con Node + Postgres real) y cliente de `kodaWhatsApp`. |
+
+Secret opcional de `koda-wa-inbox`: `CONNEXO_WA_PHONE_ID` (segunda barrera: solo se aceptan eventos de ese número; si falta, manda el `phone_id` que diga Connexo, que a su vez solo reenvía lo de `WHATSAPP_PHONE_NUMBER_ID`).
+
+Orden de despliegue: migración (`db query --linked -f`, nunca `db push`) → `koda-wa-inbox` y `koda-connexo` → front → en Connexo, `kodaWhatsApp` (pegarla en el panel; desde ahí empieza a reenviar) → webhook de Vercel (`api/webhooks/whatsapp.ts`, para los ✓✓).

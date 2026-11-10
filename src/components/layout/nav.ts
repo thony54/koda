@@ -18,6 +18,7 @@ import {
   KeyRound,
   Brain,
   Send,
+  Inbox,
 } from 'lucide-react';
 import type { AccessRule } from '@/lib/permissions';
 
@@ -51,6 +52,7 @@ export const navGroups: NavGroup[] = [
       { to: '/mapa', label: 'Mapa', icon: Map, permiso: 'mapa' },
       { to: '/reportes', label: 'Reportes', icon: BarChart3, permiso: 'reportes' },
       { to: '/connexo', label: 'Connexo', icon: Send, propietario: true },
+      { to: '/bandeja', label: 'Bandeja', icon: Inbox, propietario: true },
       { to: '/logs', label: 'Auditoría', icon: ScrollText, propietario: true },
     ],
   },

@@ -18,5 +18,10 @@ verify_jwt = false
 [functions.koda-digest]
 verify_jwt = false
 
+# koda-wa-inbox (bandeja de WhatsApp, migración 0016) solo la llama Connexo con el secreto compartido
+# (`x-koda-secret`), no con un JWT: se autentica ella misma y comprueba el secreto antes de hacer nada.
+[functions.koda-wa-inbox]
+verify_jwt = false
+
 # koda-collector y koda-users solo las llama el panel con el JWT del usuario:
 # se quedan con verify_jwt = true (por defecto).

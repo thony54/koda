@@ -4,6 +4,7 @@ import { navGroups } from './nav';
 import { useAuth } from '@/hooks/useAuth';
 import { canAccess } from '@/lib/permissions';
 import { useUIStore } from '@/store/uiStore';
+import { useBandejaStore } from '@/store/bandejaStore';
 
 const roleLabel: Record<string, string> = {
   super_admin: 'Super Admin',
@@ -15,6 +16,7 @@ export function Sidebar() {
   const { profile, signOut } = useAuth();
   const sidebarOpen = useUIStore((s) => s.sidebarOpen);
   const setSidebarOpen = useUIStore((s) => s.setSidebarOpen);
+  const noLeidos = useBandejaStore((s) => s.noLeidos);
 
   const displayName = profile?.nombre || profile?.email || 'Usuario';
   const initial = displayName.trim().charAt(0).toUpperCase();
@@ -87,6 +89,11 @@ export function Sidebar() {
                     >
                       <Icon className="h-[17px] w-[17px]" strokeWidth={1.75} />
                       {item.label}
+                      {item.to === '/bandeja' && noLeidos > 0 && (
+                        <span className="ml-auto grid h-[18px] min-w-[18px] place-items-center rounded-full bg-accent px-1.5 text-[10.5px] font-semibold tabular-nums text-accent-on" aria-label={`${noLeidos} mensajes sin leer`}>
+                          {noLeidos > 99 ? '99+' : noLeidos}
+                        </span>
+                      )}
                     </NavLink>
                   );
                 })}

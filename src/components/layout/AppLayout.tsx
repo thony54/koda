@@ -2,12 +2,14 @@ import { Outlet, useLocation } from 'react-router-dom';
 import { Sidebar } from './Sidebar';
 import { Topbar } from './Topbar';
 import { ScopeBanner } from './ScopeSwitcher';
+import { BandejaVivo } from '@/components/bandeja/BandejaVivo';
 
 /** Shell autenticado: sidebar fija + topbar + contenido. El fondo atmosférico vive en <body>. */
 export function AppLayout() {
   const { pathname } = useLocation();
   return (
     <div className="min-h-screen">
+      <BandejaVivo />
       <Sidebar />
       <div className="flex min-h-screen flex-col lg:pl-60">
         <Topbar />

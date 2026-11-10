@@ -95,7 +95,7 @@ const ES_TIENDA = /(^| )store$/;
 const PISTAS_DE_NOMBRE: [string, RegExp][] = [
   ['sublimados', /imprent|print|sublim|serigraf|estampad|gigantograf|rotulo|copiad|bordad/],
   ['librerias', /libreria|\blibros\b|bookstore|bookshop/],
-  ['musicos', /\bmusic|sonido|grabacion|mariachi|orquesta|\bdj\b/],
+  ['musicos', /\bmusic|sonido|grabacion|mariachi|orquesta|\bdj\b|conservatorio|rockademia|escuela de rock/],
   ['profesionales', /fotograf|psicolog|nutricion|\bcoach\b/],
   ['belleza', /barber|peluquer|salon de belleza|centro de estetica|\bnails?\b|manicur|\bspa\b/],
   ['salud', /clinica|consultorio|dental|odontolog|\bmedic|laboratorio clinico/],

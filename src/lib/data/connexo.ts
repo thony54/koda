@@ -225,6 +225,7 @@ const TABLA_LABEL: Record<string, [string, string]> = {
   barber_staff: ['persona del equipo', 'personas del equipo'], ecom_staff: ['persona del equipo', 'personas del equipo'],
   sublima_products: ['producto de ejemplo', 'productos de ejemplo'],
   books_titles: ['libro de ejemplo', 'libros de ejemplo'],
+  stage_classes: ['clase de ejemplo', 'clases de ejemplo'],
 };
 
 /** Separa lo que viene del prospecto (KODA) de lo que es contenido de EJEMPLO del banco de recursos. */

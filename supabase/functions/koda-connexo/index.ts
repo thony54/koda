@@ -8,8 +8,11 @@
 // (ver can_send_connexo() en 0013). No la llama el cron.
 //
 // Acciones:
-//   { action: 'enviar', prospect_ids: string[] }  → arma el borrador de cada prospecto en Connexo
-//   { action: 'estado' }                          → refresca el estado de los envíos desde Connexo
+//   { action: 'enviar', prospect_ids, lote?, dry_run? } → arma el borrador de cada prospecto en Connexo, dentro de un LOTE
+//        (lote: {id} para seguir llenando uno existente, {nombre?} para abrir uno nuevo). Con dry_run:true NO envía nada:
+//        dice cuáles saldrían y por qué se omite el resto (vista previa del lote).
+//   { action: 'estado' }                          → refresca el estado de los envíos desde Connexo (y le avisa de los lotes nuevos)
+//   { action: 'lote_renombrar', lote_id, nombre } → cambia el nombre del lote (Connexo lo recibe al instante o en el próximo refresco)
 //   { action: 'revision', envio_ids, paso }       → aprobar | devolver | descartar | restaurar | rellenar
 //   { action: 'detalle', envio_id }               → qué se llenó, de dónde salió cada dato y el enlace de vista previa
 //   { action: 'whatsapp_cupo' }                   → cuántos WhatsApp quedan hoy (ventana de 24 h)
@@ -24,9 +27,16 @@
 import { corsHeaders, json } from '../_shared/cors.ts';
 import { getAdminClient, requireCaller, type Caller } from '../_shared/supabaseAdmin.ts';
 import { rubroDe } from '../_shared/rubros.ts';
+import {
+  celularEC, ESTADOS_CONTACTADOS, evaluarEnvio, saludoYaEnviado, type EnvioRegistrado,
+} from '../_shared/connexoEnvio.ts';
 
 const VERSION_CONTRATO = 1;
 const MAX_POR_LLAMADA = 50;
+// La vista previa del lote no llama a Connexo, así que admite una selección grande de una vez; las consultas a la
+// base se parten en trozos para no armar direcciones kilométricas.
+const MAX_VISTA_PREVIA = 200;
+const TROZO_CONSULTA = 50;
 // «enviar» y «revision» hacen UNA llamada a Connexo por negocio dentro de la misma ejecución, y Supabase corta con
 // «Rate limit exceeded for trace» pasadas ~30 llamadas encadenadas (se vio con 50: 30 salieron y 20 fallaron).
 // La pantalla manda en tandas de 25; el WhatsApp es una sola llamada y admite 50.
@@ -36,8 +46,6 @@ const TIMEOUT_MS = 30_000;
 // Enviar hasta 50 WhatsApp toma más (Meta responde ~0,5 s por mensaje, 3 en paralelo).
 const TIMEOUT_WA_MS = 120_000;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-// Celular de Ecuador en E.164 sin el "+": 5939 + 8 dígitos. Los fijos no reciben WhatsApp.
-const MOVIL_EC_RE = /^5939\d{8}$/;
 
 const ESTADOS = new Set([
   'pendiente', 'borrador', 'aprobado', 'wa_enviado', 'aceptado',
@@ -120,15 +128,49 @@ async function enParalelo<T, R>(items: T[], n: number, fn: (x: T) => Promise<R>)
   return out;
 }
 
-const soloDigitos = (s: string | null | undefined) => (s ?? '').replace(/\D/g, '');
+const trozos = <T,>(xs: T[], n: number): T[][] => {
+  const out: T[][] = [];
+  for (let i = 0; i < xs.length; i += n) out.push(xs.slice(i, i + n));
+  return out;
+};
 
-/** Celular de Ecuador en E.164 (+5939XXXXXXXX) desde cualquier formato habitual, o null (fijos, extranjeros, basura). */
-function celularEC(raw: string | null | undefined): string | null {
-  let d = soloDigitos(raw);
-  if (d.startsWith('00')) d = d.slice(2);
-  if (/^09\d{8}$/.test(d)) d = `593${d.slice(1)}`;
-  else if (/^9\d{8}$/.test(d)) d = `593${d}`;
-  return MOVIL_EC_RE.test(d) ? `+${d}` : null;
+/** Corre una consulta `.in(...)` por trozos de ids y junta las filas (una selección grande no cabe en una dirección). */
+async function porTrozos<R>(
+  ids: string[],
+  consulta: (trozo: string[]) => PromiseLike<{ data: R[] | null; error: { message: string } | null }>,
+): Promise<R[]> {
+  const out: R[] = [];
+  for (const t of trozos(ids, TROZO_CONSULTA)) {
+    const { data, error } = await consulta(t);
+    if (error) throw new Error(error.message);
+    out.push(...(data ?? []));
+  }
+  return out;
+}
+
+interface Lote { id: string; numero: number; nombre: string | null }
+
+/**
+ * Le avisa a Connexo el número y el nombre de los lotes que aún no conoce (nuevos o renombrados). Si Connexo no
+ * responde, el lote queda por sincronizar y se reintenta en el próximo refresco: nunca estorba a quien llama.
+ */
+async function sincronizarLotes(admin: ReturnType<typeof getAdminClient>, ownerId: string): Promise<void> {
+  const { data: lotes } = await admin.from('connexo_lotes')
+    .select('id, numero, nombre, actualizado_at')
+    .eq('owner_id', ownerId).is('sincronizado_at', null).order('numero').limit(10);
+  for (const l of lotes ?? []) {
+    try {
+      const { data: envios } = await admin.from('connexo_envios').select('id').eq('lote_id', l.id).limit(1000);
+      for (const t of trozos((envios ?? []).map((e) => e.id as string), 200)) {
+        await llamarPuente({ action: 'lote_set', lote: { id: l.id, numero: l.numero, nombre: l.nombre }, envio_ids: t });
+      }
+      // Si lo renombraron mientras tanto, no se da por sincronizado.
+      await admin.from('connexo_lotes').update({ sincronizado_at: new Date().toISOString() })
+        .eq('id', l.id).eq('actualizado_at', l.actualizado_at);
+    } catch (e) {
+      console.error('[koda-connexo] lote sin sincronizar:', l.id, e instanceof Error ? e.message : e);
+    }
+  }
 }
 
 Deno.serve(async (req) => {
@@ -155,102 +197,148 @@ Deno.serve(async (req) => {
       if (!caller.esPropietario) q = q.eq('owner_id', caller.id);
       const { data: filas, error: fErr } = await q;
       if (fErr) return json({ error: fErr.message }, 500);
-      if (!filas?.length) return json({ ok: true, configurado: true, actualizados: 0 });
-
-      const r = await llamarPuente({
-        action: 'status',
-        items: filas.map((f) => ({ envio_id: f.id, koda_prospect_id: f.prospect_id })),
-      });
-
       let actualizados = 0;
-      for (const it of (r.items ?? []) as Json[]) {
-        const estado = ESTADOS.has(it.estado) ? it.estado : null;
-        if (!it.envio_id || !estado) continue;
-        const { error: uErr } = await admin.from('connexo_envios').update({
-          estado,
-          detalle: it.detalle ?? null,
-          connexo_profile_id: it.profile_id ?? null,
-          connexo_username: it.username ?? null,
-          connexo_theme: it.theme ?? null,
-          actualizado_at: new Date().toISOString(),
-        }).eq('id', it.envio_id);
-        if (!uErr) actualizados++;
-        // Si el negocio pidió no recibir más mensajes, KODA lo respeta en toda su base.
-        if (it.opt_out === true && it.koda_prospect_id) {
-          await admin.from('prospects').update({ opt_out: true }).eq('id', it.koda_prospect_id);
+      if (filas?.length) {
+        const r = await llamarPuente({
+          action: 'status',
+          items: filas.map((f) => ({ envio_id: f.id, koda_prospect_id: f.prospect_id })),
+        });
+
+        for (const it of (r.items ?? []) as Json[]) {
+          const estado = ESTADOS.has(it.estado) ? it.estado : null;
+          if (!it.envio_id || !estado) continue;
+          const { error: uErr } = await admin.from('connexo_envios').update({
+            estado,
+            detalle: it.detalle ?? null,
+            connexo_profile_id: it.profile_id ?? null,
+            connexo_username: it.username ?? null,
+            connexo_theme: it.theme ?? null,
+            actualizado_at: new Date().toISOString(),
+          }).eq('id', it.envio_id);
+          if (!uErr) actualizados++;
+          // Si el negocio pidió no recibir más mensajes, KODA lo respeta en toda su base.
+          if (it.opt_out === true && it.koda_prospect_id) {
+            await admin.from('prospects').update({ opt_out: true }).eq('id', it.koda_prospect_id);
+          }
         }
       }
+      // Los lotes nuevos o renombrados le llegan a Connexo aquí (cada vez que se abre la pantalla de Connexo).
+      await sincronizarLotes(admin, caller.id);
       return json({ ok: true, configurado: true, actualizados });
+    }
+
+    // ── Renombrar un lote ─────────────────────────────────────────────────
+    if (body?.action === 'lote_renombrar') {
+      const id = body.lote_id;
+      if (typeof id !== 'string' || !UUID_RE.test(id)) return json({ error: 'lote_id inválido.' }, 400);
+      const nombre = typeof body.nombre === 'string' ? body.nombre.trim().slice(0, 80) : '';
+      const ahora = new Date().toISOString();
+      const { data: lote, error: lErr } = await admin.from('connexo_lotes')
+        .update({ nombre: nombre || null, actualizado_at: ahora, sincronizado_at: null })
+        .eq('id', id).eq('owner_id', caller.id).select('id, numero, nombre').maybeSingle();
+      if (lErr) return json({ error: lErr.message }, 500);
+      if (!lote) return json({ error: 'No encontré ese lote.' }, 404);
+      if (puenteConfigurado()) await sincronizarLotes(admin, caller.id);
+      return json({ ok: true, lote });
     }
 
     // ── Enviar prospectos a Connexo ───────────────────────────────────────
     if (body?.action === 'enviar') {
+      const vistaPrevia = body.dry_run === true;
       const pedidos: unknown[] = Array.isArray(body.prospect_ids) ? body.prospect_ids : [];
       const ids: string[] = [...new Set(
         pedidos.filter((x): x is string => typeof x === 'string' && UUID_RE.test(x)),
       )];
       if (!ids.length) return json({ error: 'No elegiste ningún prospecto.' }, 400);
-      if (ids.length > MAX_TANDA_PUENTE) return json({ error: `Envía como máximo ${MAX_TANDA_PUENTE} prospectos por vez.` }, 400);
-      if (!Deno.env.get('CONNEXO_BRIDGE_URL') || !Deno.env.get('CONNEXO_BRIDGE_SECRET')) {
-        return json({ error: new PuenteSinConfigurar().message }, 503);
-      }
+      const tope = vistaPrevia ? MAX_VISTA_PREVIA : MAX_TANDA_PUENTE;
+      if (ids.length > tope) return json({ error: `Envía como máximo ${tope} prospectos por vez.` }, 400);
+      if (!vistaPrevia && !puenteConfigurado()) return json({ error: new PuenteSinConfigurar().message }, 503);
 
-      const [prospectosR, contactosR, corridasR, existentesR] = await Promise.all([
-        admin.from('prospects')
-          .select('id, owner_id, nombre, categoria, descripcion, direccion, ciudad, provincia, pais, lat, lng, website, instagram, facebook, tiktok, whatsapp, google_maps_url, rating, reviews_count, opt_out, anonimizado')
-          .in('id', ids),
-        admin.from('prospect_contacts').select('prospect_id, tipo, valor').in('prospect_id', ids).in('tipo', ['email', 'telefono']),
-        admin.from('prospect_runs').select('prospect_id, job_id, found_at').in('prospect_id', ids).order('found_at', { ascending: false }),
-        admin.from('connexo_envios').select('id, prospect_id, estado').in('prospect_id', ids),
+      const [prospectosD, contactosD, corridasD, existentesD] = await Promise.all([
+        porTrozos(ids, (t) => admin.from('prospects')
+          .select('id, owner_id, nombre, categoria, descripcion, direccion, ciudad, provincia, pais, lat, lng, website, instagram, facebook, tiktok, whatsapp, google_maps_url, rating, reviews_count, opt_out, anonimizado, status')
+          .in('id', t)),
+        porTrozos(ids, (t) => admin.from('prospect_contacts').select('prospect_id, tipo, valor').in('prospect_id', t).in('tipo', ['email', 'telefono'])),
+        porTrozos(ids, (t) => admin.from('prospect_runs').select('prospect_id, job_id, found_at').in('prospect_id', t).order('found_at', { ascending: false })),
+        porTrozos(ids, (t) => admin.from('connexo_envios').select('id, prospect_id, prospect_nombre, estado, whatsapp').in('prospect_id', t)),
       ]);
-      if (prospectosR.error) return json({ error: prospectosR.error.message }, 500);
 
       const contactos = new Map<string, { email?: string; telefono?: string }>();
-      for (const c of contactosR.data ?? []) {
+      for (const c of contactosD) {
         const e = contactos.get(c.prospect_id) ?? {};
         if (c.tipo === 'email' && !e.email) e.email = String(c.valor).trim().toLowerCase();
         if (c.tipo === 'telefono' && !e.telefono) e.telefono = String(c.valor);
         contactos.set(c.prospect_id, e);
       }
       const jobDe = new Map<string, string>();   // prospecto → búsqueda más reciente
-      for (const c of corridasR.data ?? []) if (c.job_id && !jobDe.has(c.prospect_id)) jobDe.set(c.prospect_id, c.job_id);
+      for (const c of [...corridasD].sort((a, b) => String(b.found_at).localeCompare(String(a.found_at)))) {
+        if (c.job_id && !jobDe.has(c.prospect_id)) jobDe.set(c.prospect_id, c.job_id);
+      }
       const jobIds = [...new Set(jobDe.values())];
-      const { data: jobs } = jobIds.length
-        ? await admin.from('search_jobs').select('id, nombre').in('id', jobIds)
-        : { data: [] as { id: string; nombre: string }[] };
-      const nombreJob = new Map((jobs ?? []).map((j) => [j.id, j.nombre as string]));
-      const existentes = new Map((existentesR.data ?? []).map((e) => [e.prospect_id as string, e]));
+      const jobs = jobIds.length ? await porTrozos(jobIds, (t) => admin.from('search_jobs').select('id, nombre').in('id', t)) : [];
+      const nombreJob = new Map(jobs.map((j) => [j.id as string, j.nombre as string]));
+      const existentes = new Map(existentesD.map((e) => [e.prospect_id as string, e as EnvioRegistrado]));
 
-      const ownerIds = [...new Set((prospectosR.data ?? []).map((p) => p.owner_id as string))];
-      const { data: duenos } = await admin.from('profiles').select('id, email, nombre').in('id', ownerIds);
-      const dueno = new Map((duenos ?? []).map((d) => [d.id as string, d]));
+      // Libro de celulares: TODO envío registrado con el celular de cualquiera de estos prospectos (aunque sea de
+      // otro prospecto o de uno ya borrado). Así el mismo negocio no recibe el saludo dos veces.
+      const celulares = [...new Set(prospectosD.map((p) => celularEC(p.whatsapp)).filter((x): x is string => !!x))];
+      const libro = celulares.length
+        ? await porTrozos(celulares, (t) => admin.from('connexo_envios').select('id, prospect_id, prospect_nombre, estado, whatsapp').in('whatsapp', t))
+        : [];
+      const porCelular = new Map<string, EnvioRegistrado[]>();
+      for (const e of libro as EnvioRegistrado[]) {
+        if (!e.whatsapp) continue;
+        porCelular.set(e.whatsapp, [...(porCelular.get(e.whatsapp) ?? []), e]);
+      }
+
+      const ownerIds = [...new Set(prospectosD.map((p) => p.owner_id as string))];
+      const duenos = ownerIds.length ? await porTrozos(ownerIds, (t) => admin.from('profiles').select('id, email, nombre').in('id', t)) : [];
+      const dueno = new Map(duenos.map((d) => [d.id as string, d]));
 
       const resultados: Json[] = [];
       const aEnviar: Json[] = [];
-      const hallados = new Set<string>();
+      const porId = new Map(prospectosD.map((p) => [p.id as string, p]));
+      const yaEnLote = new Map<string, string>();   // celular → negocio al que le tocó primero en este envío
 
-      for (const p of prospectosR.data ?? []) {
-        hallados.add(p.id);
+      // En el orden en que el propietario los eligió, para que el desempate entre dos con el mismo celular sea predecible.
+      for (const id of ids) {
+        const p = porId.get(id);
+        if (!p) { resultados.push({ prospect_id: id, resultado: 'omitido', codigo: 'no_existe', motivo: 'No existe.' }); continue; }
         const base = { prospect_id: p.id, nombre: p.nombre };
-        // El aislamiento lo aplicamos a mano porque esta función usa service_role.
-        if (!caller.esPropietario && p.owner_id !== caller.id) {
-          resultados.push({ ...base, resultado: 'omitido', motivo: 'No es tuyo.' });
-          continue;
-        }
-        if (p.opt_out) { resultados.push({ ...base, resultado: 'omitido', motivo: 'Pidió no ser contactado.' }); continue; }
-        if (p.anonimizado) { resultados.push({ ...base, resultado: 'omitido', motivo: 'Datos anonimizados.' }); continue; }
-        const ex = existentes.get(p.id);
-        if (ex && ex.estado !== 'error') {
-          resultados.push({ ...base, resultado: 'omitido', motivo: 'Ya fue enviado a Connexo.', estado: ex.estado });
-          continue;
-        }
-        if (!celularEC(p.whatsapp)) {
-          resultados.push({ ...base, resultado: 'omitido', motivo: 'No tiene un celular con WhatsApp (los fijos no reciben).' });
-          continue;
-        }
+        const rubro = rubroDe(p.categoria, p.nombre);
+        const celular = celularEC(p.whatsapp);
+        const omision = evaluarEnvio(p, {
+          esPropietario: caller.esPropietario,
+          callerId: caller.id,
+          rubro,
+          propio: existentes.get(p.id) ?? null,
+          conMismoCelular: celular ? (porCelular.get(celular) ?? []) : [],
+          yaEnLote,
+        });
+        if (omision) { resultados.push({ ...base, resultado: 'omitido', ...omision }); continue; }
+        if (celular) yaEnLote.set(celular, p.nombre);
         aEnviar.push(p);
+        if (vistaPrevia) resultados.push({ ...base, resultado: 'listo', rubro, categoria: p.categoria ?? null, ciudad: p.ciudad ?? null });
       }
-      for (const id of ids) if (!hallados.has(id)) resultados.push({ prospect_id: id, resultado: 'omitido', motivo: 'No existe.' });
+
+      if (vistaPrevia) return json({ ok: true, vista_previa: true, listos: aEnviar.length, resultados });
+
+      // Todo envío vive dentro de un lote: el que se está llenando (varias tandas seguidas) o uno nuevo.
+      let lote: Lote | null = null;
+      if (aEnviar.length) {
+        const pedido: Json = (body.lote && typeof body.lote === 'object') ? body.lote : {};
+        if (typeof pedido.id === 'string' && UUID_RE.test(pedido.id)) {
+          const { data } = await admin.from('connexo_lotes').select('id, numero, nombre').eq('id', pedido.id).eq('owner_id', caller.id).maybeSingle();
+          if (!data) return json({ error: 'Ese lote no existe.' }, 404);
+          lote = data as Lote;
+        } else {
+          const { data, error } = await admin.rpc('connexo_nuevo_lote', {
+            p_owner: caller.id, p_nombre: typeof pedido.nombre === 'string' ? pedido.nombre : null, p_usuario: caller.id,
+          });
+          if (error || !data) return json({ error: error?.message ?? 'No se pudo crear el lote.' }, 500);
+          lote = data as Lote;
+        }
+      }
 
       await enParalelo(aEnviar, CONCURRENCIA, async (p) => {
         const c = contactos.get(p.id) ?? {};
@@ -261,10 +349,12 @@ Deno.serve(async (req) => {
         const ahora = new Date().toISOString();
 
         // 1) Se registra ANTES de llamar: si la función se corta, el envío no se pierde ni se duplica.
+        //    Con el celular y el lote: el celular queda en el libro aunque luego se borre el prospecto.
         const fila = {
           owner_id: p.owner_id, prospect_id: p.id, prospect_nombre: p.nombre, prospect_ciudad: p.ciudad,
           categoria: p.categoria, rubro, job_id: jobId, busqueda_nombre: busqueda, estado: 'pendiente',
           detalle: null, enviado_por: caller.id, enviado_at: ahora, actualizado_at: ahora,
+          whatsapp: celularEC(p.whatsapp), lote_id: lote?.id ?? null,
         };
         const ex = existentes.get(p.id);
         let envioId: string;
@@ -288,6 +378,7 @@ Deno.serve(async (req) => {
               owner_email: d?.email ?? null,
               owner_nombre: d?.nombre ?? null,
               busqueda: busqueda ? { job_id: jobId, nombre: busqueda } : null,
+              lote: lote ? { id: lote.id, numero: lote.numero, nombre: lote.nombre } : null,
             },
             negocio: {
               nombre: p.nombre,
@@ -321,7 +412,12 @@ Deno.serve(async (req) => {
             connexo_theme: r.theme ?? null,
             actualizado_at: new Date().toISOString(),
           }).eq('id', envioId);
-          resultados.push({ prospect_id: p.id, nombre: p.nombre, resultado: 'enviado', estado, username: r.username ?? null, theme: r.theme ?? null });
+          // Connexo también vigila los celulares repetidos: si lo descartó por eso, aquí NO cuenta como enviado.
+          if (estado === 'descartado') {
+            resultados.push({ prospect_id: p.id, nombre: p.nombre, resultado: 'omitido', codigo: 'celular_repetido', motivo: r.detalle ?? 'Connexo lo descartó.', estado });
+          } else {
+            resultados.push({ prospect_id: p.id, nombre: p.nombre, resultado: 'enviado', estado, username: r.username ?? null, theme: r.theme ?? null });
+          }
         } catch (e) {
           const msg = e instanceof Error ? e.message : String(e);
           await admin.from('connexo_envios').update({ estado: 'error', detalle: msg, actualizado_at: new Date().toISOString() }).eq('id', envioId);
@@ -339,9 +435,10 @@ Deno.serve(async (req) => {
           enviados,
           omitidos: resultados.filter((r) => r.resultado === 'omitido').length,
           errores: resultados.filter((r) => r.resultado === 'error').length,
+          lote: lote ? lote.numero : null,
         },
       });
-      return json({ ok: true, enviados, resultados });
+      return json({ ok: true, enviados, resultados, lote });
     }
 
     // ── Revisión: aprobar, devolver, descartar, restaurar o rehacer el relleno ──
@@ -432,21 +529,42 @@ Deno.serve(async (req) => {
       if (ids.length > MAX_POR_LLAMADA) return json({ error: `Elige como máximo ${MAX_POR_LLAMADA} negocios por vez.` }, 400);
       if (!puenteConfigurado()) return json({ error: new PuenteSinConfigurar().message }, 503);
 
-      let q = admin.from('connexo_envios').select('id, prospect_nombre, estado').in('id', ids);
+      let q = admin.from('connexo_envios').select('id, prospect_id, prospect_nombre, estado, whatsapp').in('id', ids);
       if (!caller.esPropietario) q = q.eq('owner_id', caller.id);
       const { data: filas, error: fErr } = await q;
       if (fErr) return json({ error: fErr.message }, 500);
       const porId = new Map((filas ?? []).map((f) => [f.id as string, f]));
 
+      // Libro de celulares: quién más, con el mismo celular, ya recibió (o está recibiendo) el saludo.
+      const celulares = [...new Set((filas ?? []).filter((f) => f.estado === 'aprobado').map((f) => f.whatsapp as string | null).filter((x): x is string => !!x))];
+      const contactados = celulares.length
+        ? await porTrozos(celulares, (t) => admin.from('connexo_envios')
+            .select('id, prospect_id, prospect_nombre, estado, whatsapp').in('whatsapp', t).in('estado', ESTADOS_CONTACTADOS))
+        : [];
+
       // Solo los APROBADOS salen (Connexo lo vuelve a comprobar). El resto se explica, no se manda.
       const resultados: Json[] = [];
       const aEnviar: string[] = [];
+      const yaEnTanda = new Map<string, string>();   // celular → negocio al que le toca en esta tanda
       for (const id of ids) {
         const f = porId.get(id);
-        if (!f) resultados.push({ id, resultado: 'omitido', motivo: 'No lo encontré entre tus envíos.' });
-        else if (f.estado !== 'aprobado') {
+        if (!f) { resultados.push({ id, resultado: 'omitido', motivo: 'No lo encontré entre tus envíos.' }); continue; }
+        if (f.estado !== 'aprobado') {
           resultados.push({ id, nombre: f.prospect_nombre, resultado: 'omitido', motivo: `Está en «${f.estado}»: primero apruébalo.` });
-        } else aEnviar.push(id);
+          continue;
+        }
+        const otro = saludoYaEnviado(f, contactados as EnvioRegistrado[]);
+        if (otro) {
+          resultados.push({ id, nombre: f.prospect_nombre, resultado: 'omitido', motivo: `Ese celular ya recibió el saludo (como «${otro.prospect_nombre}»): no se le escribe dos veces.` });
+          continue;
+        }
+        const gemelo = f.whatsapp ? yaEnTanda.get(f.whatsapp) : undefined;
+        if (gemelo) {
+          resultados.push({ id, nombre: f.prospect_nombre, resultado: 'omitido', motivo: `Tiene el mismo celular que «${gemelo}», que sale en esta misma tanda.` });
+          continue;
+        }
+        if (f.whatsapp) yaEnTanda.set(f.whatsapp, f.prospect_nombre);
+        aEnviar.push(id);
       }
 
       let cupo: Json | null = null;

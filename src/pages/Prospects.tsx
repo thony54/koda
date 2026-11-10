@@ -1,13 +1,12 @@
-import { useEffect, useMemo, useState } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
-import { Users, Download, ChevronLeft, ChevronRight, Loader2, Send } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
+import { Users, Download, ChevronLeft, ChevronRight, Loader2, Layers } from 'lucide-react';
 import { PageHeader, EmptyState } from '@/components/layout/PageHeader';
 import { Filters, STATUS_LABEL } from '@/components/prospects/Filters';
 import { ProspectTable } from '@/components/prospects/ProspectTable';
-import { Badge, Button, Modal } from '@/components/ui';
+import { Button } from '@/components/ui';
+import { NuevoLoteModal } from '@/components/connexo/NuevoLoteModal';
 import { useProspects, useUpdateProspect } from '@/hooks/useProspects';
-import { useEnviarAConnexo } from '@/hooks/useConnexo';
-import type { ResultadoEnvio } from '@/lib/data/connexo';
 import type { ProspectFilters, SortField, SortDir, Encontrados } from '@/lib/data/prospects';
 import type { Prospect, ProspectStatus } from '@/types/domain';
 import { useUIStore } from '@/store/uiStore';
@@ -48,29 +47,39 @@ function exportCSV(rows: Prospect[], incluirPlan: boolean) {
 
 export default function Prospects() {
   const [searchParams, setSearchParams] = useSearchParams();
-  const [filters, setFilters] = useState<ProspectFilters>(() => filtrosDeUrl(searchParams));
+  const toast = useUIStore((s) => s.toast);
+  const { can, isOwner } = useAuth();
+  // La cuenta propietaria arranca viendo solo lo que todavía puede ofrecer a Connexo: lo ya enviado, rechazado o
+  // vencido no vuelve a salir como candidato en las búsquedas nuevas (se ve con «Ya en Connexo» o «Todos»).
+  const base = useMemo<ProspectFilters>(() => (isOwner ? { connexo: 'disponibles' } : {}), [isOwner]);
+  const [filters, setFilters] = useState<ProspectFilters>(() => ({ ...base, ...filtrosDeUrl(searchParams) }));
   const [sortBy, setSortBy] = useState<SortField>('score');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
   const [page, setPage] = useState(1);
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const toast = useUIStore((s) => s.toast);
-  const { can, isOwner } = useAuth();
   const canExport = can('exportar');
   const updateProspect = useUpdateProspect();
-  const enviarAConnexo = useEnviarAConnexo();
-  const [connexoOpen, setConnexoOpen] = useState(false);
-  const [connexoResultados, setConnexoResultados] = useState<ResultadoEnvio[] | null>(null);
+  const [loteOpen, setLoteOpen] = useState(false);
+
+  // `isOwner` llega de la sesión un instante después de abrir la pantalla: cuando se confirma, se aplica el filtro de partida.
+  const baseAplicada = useRef(isOwner);
+  useEffect(() => {
+    if (isOwner && !baseAplicada.current) {
+      baseAplicada.current = true;
+      setFilters((f) => ({ ...base, ...f }));
+    }
+  }, [isOwner, base]);
 
   // Si llegas con otro enlace estando ya en la pantalla, se aplica; el enlace se limpia para que
   // los filtros que cambies después no se pisen con él.
   useEffect(() => {
     const desdeUrl = filtrosDeUrl(searchParams);
     if (Object.keys(desdeUrl).length === 0) return;
-    setFilters(desdeUrl);
+    setFilters({ ...base, ...desdeUrl });
     setPage(1);
     setSelected(new Set());
     setSearchParams({}, { replace: true });
-  }, [searchParams, setSearchParams]);
+  }, [searchParams, setSearchParams, base]);
 
   const params = useMemo(
     () => ({ ...filters, sortBy, sortDir, page, pageSize: PAGE_SIZE }),
@@ -126,22 +135,14 @@ export default function Prospects() {
     toast(`Exportados ${chosen.length || rows.length} prospectos a CSV`, 'success');
   }
 
-  async function enviarSeleccion() {
-    try {
-      const r = await enviarAConnexo.mutateAsync([...selected]);
-      setConnexoResultados(r.resultados);
-      if (r.enviados) setSelected(new Set());
-    } catch (e) {
-      toast(e instanceof Error ? e.message : 'No se pudo enviar a Connexo.', 'error');
-    }
+  function cerrarLote(huboEnvios: boolean) {
+    setLoteOpen(false);
+    if (huboEnvios) setSelected(new Set());
   }
 
-  function cerrarConnexo() {
-    setConnexoOpen(false);
-    setConnexoResultados(null);
-  }
-
-  const noFilters = Object.keys(filters).length === 0;
+  // «Sin filtros» = solo los de partida (para el propietario, «Para Connexo»).
+  const noFilters = Object.keys(filters).every((k) => filters[k as keyof ProspectFilters] === base[k as keyof ProspectFilters])
+    && Object.keys(base).every((k) => filters[k as keyof ProspectFilters] === base[k as keyof ProspectFilters]);
 
   return (
     <div>
@@ -158,7 +159,7 @@ export default function Prospects() {
         }
       />
 
-      <Filters value={filters} onChange={changeFilters} />
+      <Filters value={filters} onChange={changeFilters} base={base} />
 
       {/* Barra de acciones en lote */}
       {selected.size > 0 && (
@@ -170,8 +171,8 @@ export default function Prospects() {
           <button onClick={() => bulkStatus('calificado')} className="rounded px-2 py-1 text-ink-secondary hover:bg-veil/[0.08] hover:text-ink-primary">Marcar calificado</button>
           <button onClick={() => bulkStatus('descartado')} className="rounded px-2 py-1 text-ink-secondary hover:bg-veil/[0.08] hover:text-ink-primary">Descartar</button>
           {isOwner && (
-            <button onClick={() => setConnexoOpen(true)} className="inline-flex items-center gap-1 rounded px-2 py-1 text-accent-text hover:bg-veil/[0.08]">
-              <Send className="h-3.5 w-3.5" /> Enviar a Connexo
+            <button onClick={() => setLoteOpen(true)} className="inline-flex items-center gap-1 rounded px-2 py-1 text-accent-text hover:bg-veil/[0.08]">
+              <Layers className="h-3.5 w-3.5" /> Armar lote para Connexo
             </button>
           )}
           {canExport && (
@@ -194,7 +195,7 @@ export default function Prospects() {
               ? 'Crea una búsqueda o importa un CSV para empezar a llenar la base.'
               : 'Prueba con otros filtros o límpialos para ver todo.'
           }
-          action={!noFilters ? <Button variant="secondary" size="sm" onClick={() => changeFilters({})}>Limpiar filtros</Button> : undefined}
+          action={!noFilters ? <Button variant="secondary" size="sm" onClick={() => changeFilters(base)}>Limpiar filtros</Button> : undefined}
         />
       ) : (
         <>
@@ -237,63 +238,7 @@ export default function Prospects() {
         </>
       )}
 
-      <Modal
-        open={connexoOpen}
-        onClose={cerrarConnexo}
-        title="Enviar a Connexo"
-        footer={
-          connexoResultados ? (
-            <>
-              <Link to="/connexo"><Button variant="secondary" size="sm">Ver en Connexo</Button></Link>
-              <Button size="sm" onClick={cerrarConnexo}>Listo</Button>
-            </>
-          ) : (
-            <>
-              <Button variant="ghost" size="sm" onClick={cerrarConnexo}>Cancelar</Button>
-              <Button size="sm" onClick={enviarSeleccion} loading={enviarAConnexo.isPending}>
-                Enviar {selected.size}
-              </Button>
-            </>
-          )
-        }
-      >
-        {connexoResultados ? (
-          <ResumenEnvio resultados={connexoResultados} />
-        ) : (
-          <div className="space-y-3 text-sm text-ink-secondary">
-            <p>
-              Vas a enviar <span className="num font-medium text-ink-primary">{selected.size}</span> prospecto(s) a Connexo Clients.
-              Connexo armará un <strong className="text-ink-primary">perfil borrador</strong> de cada uno según su rubro.
-            </p>
-            <p>No se envía ningún WhatsApp ahora: primero revisas y apruebas cada plantilla.</p>
-            <p className="text-xs text-ink-muted">
-              Solo se envían los que tienen un celular con WhatsApp y no pidieron ser contactados.
-            </p>
-          </div>
-        )}
-      </Modal>
-    </div>
-  );
-}
-
-function ResumenEnvio({ resultados }: { resultados: ResultadoEnvio[] }) {
-  const enviados = resultados.filter((r) => r.resultado === 'enviado');
-  const otros = resultados.filter((r) => r.resultado !== 'enviado');
-  return (
-    <div className="space-y-3 text-sm">
-      <p className="text-ink-primary">
-        <span className="num font-semibold">{enviados.length}</span> de {resultados.length} enviado(s) a Connexo.
-      </p>
-      {otros.length > 0 && (
-        <ul className="space-y-1.5">
-          {otros.map((r) => (
-            <li key={r.prospect_id} className="flex items-start gap-2 text-xs text-ink-secondary">
-              <Badge variant={r.resultado === 'error' ? 'error' : 'default'}>{r.resultado === 'error' ? 'Error' : 'Omitido'}</Badge>
-              <span><strong className="text-ink-primary">{r.nombre ?? r.prospect_id}</strong> — {r.motivo}</span>
-            </li>
-          ))}
-        </ul>
-      )}
+      {loteOpen && <NuevoLoteModal open ids={[...selected]} onClose={cerrarLote} />}
     </div>
   );
 }

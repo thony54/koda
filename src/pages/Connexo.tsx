@@ -1,15 +1,16 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { CheckCheck, Loader2, MessageCircle, RefreshCw, Send, X } from 'lucide-react';
 import { PageHeader, EmptyState } from '@/components/layout/PageHeader';
-import { Badge, Button, Modal, Table, THead, TBody, TR, TH, TD } from '@/components/ui';
+import { Badge, Button, Input, Modal, Table, THead, TBody, TR, TH, TD } from '@/components/ui';
 import { RevisionModal } from '@/components/connexo/RevisionModal';
 import { AprendizajeConnexo } from '@/components/connexo/AprendizajeConnexo';
+import { LotesPanel } from '@/components/connexo/LotesPanel';
 import {
-  useCupoWhatsApp, useEnviarWhatsApp, useEnvios, useRefrescarConnexo, useRevisarEnvios,
+  useCupoWhatsApp, useEnviarWhatsApp, useEnvios, useLotes, useRefrescarConnexo, useRenombrarLote, useRevisarEnvios,
 } from '@/hooks/useConnexo';
 import {
-  ESTADO_CONNEXO, ESTADOS_PARA, PLANTILLA_CONNEXO, falloWhatsApp, type ConnexoEnvio, type ConnexoEstado,
+  ESTADO_CONNEXO, ESTADOS_PARA, PLANTILLA_CONNEXO, etiquetaLote, falloWhatsApp, type ConnexoEnvio, type ConnexoEstado, type ConnexoLote,
 } from '@/lib/data/connexo';
 import { timeAgo } from '@/lib/format';
 import { useUIStore } from '@/store/uiStore';
@@ -29,30 +30,47 @@ export default function Connexo() {
   const [seleccion, setSeleccion] = useState<Set<string>>(new Set());
   const [revisando, setRevisando] = useState<ConnexoEnvio | null>(null);
   const [confirmarDescarte, setConfirmarDescarte] = useState(false);
-  const [confirmarWa, setConfirmarWa] = useState(false);
+  // Lo que se va a invitar por WhatsApp (la selección de la tabla o un lote entero); null = el aviso está cerrado.
+  const [waLista, setWaLista] = useState<ConnexoEnvio[] | null>(null);
+  // Borradores de un lote que se aprobarán de una vez (pide confirmación: aprobar es el paso previo al WhatsApp).
+  const [aprobarLote, setAprobarLote] = useState<{ lote: ConnexoLote; lista: ConnexoEnvio[] } | null>(null);
+  const [renombrando, setRenombrando] = useState<ConnexoLote | null>(null);
+  const [nombreNuevo, setNombreNuevo] = useState('');
+  const [params, setParams] = useSearchParams();
+  const [loteSel, setLoteSel] = useState<string | null>(() => params.get('lote'));
+  const { data: lotes } = useLotes();
+  const renombrar = useRenombrarLote();
 
   const envios = data ?? [];
 
   // Al abrir la pantalla se traen en silencio los estados de Connexo: así ves de inmediato quién aceptó
   // el WhatsApp o pidió no ser contactado, sin tener que pulsar «Actualizar estados».
+  // También avisa a Connexo de los lotes nuevos o renombrados que aún no conoce.
   const sincronizado = useRef(false);
   useEffect(() => {
-    if (sincronizado.current || !data?.length) return;
+    if (sincronizado.current || !data?.length || !lotes) return;
     sincronizado.current = true;
-    if (data.some((e) => e.estado === 'wa_enviado' || e.estado === 'aprobado')) refrescar.mutate();
-  }, [data, refrescar]);
+    if (data.some((e) => e.estado === 'wa_enviado' || e.estado === 'aprobado') || lotes.some((l) => !l.sincronizado_at)) refrescar.mutate();
+  }, [data, lotes, refrescar]);
+  // Los contadores de arriba siguen al lote elegido (si hay uno): así el embudo es el de ese lote.
+  const delLote = useMemo(() => (loteSel ? envios.filter((e) => e.lote_id === loteSel) : envios), [envios, loteSel]);
   const conteo = useMemo(() => {
     const c: Partial<Record<ConnexoEstado, number>> = {};
-    for (const e of envios) c[e.estado] = (c[e.estado] ?? 0) + 1;
+    for (const e of delLote) c[e.estado] = (c[e.estado] ?? 0) + 1;
     return c;
-  }, [envios]);
+  }, [delLote]);
   const busquedas = useMemo(
     () => [...new Set(envios.map((e) => e.busqueda_nombre).filter((x): x is string => !!x))].sort(),
     [envios],
   );
   const visibles = envios.filter(
-    (e) => (filtro === 'todos' || e.estado === filtro) && (busqueda === 'todas' || e.busqueda_nombre === busqueda),
+    (e) =>
+      (filtro === 'todos' || e.estado === filtro) &&
+      (busqueda === 'todas' || e.busqueda_nombre === busqueda) &&
+      (!loteSel || e.lote_id === loteSel),
   );
+  const loteDe = useMemo(() => new Map((lotes ?? []).map((l) => [l.id, l])), [lotes]);
+  const loteElegido = loteSel ? loteDe.get(loteSel) : undefined;
   const seleccionables = visibles.filter((e) => SELECCIONABLES.includes(e.estado));
   const elegidos = envios.filter((e) => seleccion.has(e.id));
   const aprobables = elegidos.filter((e) => ESTADOS_PARA.aprobar.includes(e.estado));
@@ -63,6 +81,22 @@ export default function Connexo() {
 
   function alternar(id: string) {
     setSeleccion((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
+  }
+  function elegirLote(id: string | null) {
+    setLoteSel(id);
+    setSeleccion(new Set());
+    // El enlace (?lote=…) se limpia: manda lo que elijas aquí.
+    if (params.has('lote')) { params.delete('lote'); setParams(params, { replace: true }); }
+  }
+  async function guardarNombre() {
+    if (!renombrando) return;
+    try {
+      await renombrar.mutateAsync({ id: renombrando.id, nombre: nombreNuevo });
+      toast('Nombre del lote actualizado', 'success');
+      setRenombrando(null);
+    } catch (e) {
+      toast(e instanceof Error ? e.message : 'No se pudo cambiar el nombre.', 'error');
+    }
   }
   function alternarTodos() {
     setSeleccion(todosMarcados ? new Set() : new Set(seleccionables.map((e) => e.id)));
@@ -107,7 +141,7 @@ export default function Connexo() {
     } catch (e) {
       toast(e instanceof Error ? e.message : 'No se pudo enviar por WhatsApp.', 'error');
     } finally {
-      setConfirmarWa(false);
+      setWaLista(null);
     }
   }
 
@@ -116,7 +150,7 @@ export default function Connexo() {
       <PageHeader
         eyebrow="Puente"
         title="Connexo"
-        description="Prospectos que enviaste a Connexo Clients. Revisa el perfil que armó de cada uno, apruébalo y luego invítalo por WhatsApp."
+        description="Los lotes que enviaste a Connexo Clients. Revisa el perfil que armó de cada negocio, apruébalo y luego invítalo por WhatsApp."
         actions={
           <div className="flex items-center gap-2">
             {hayCupo && (
@@ -142,15 +176,27 @@ export default function Connexo() {
         <EmptyState
           icon={<Send className="h-6 w-6" />}
           title="Aún no has enviado prospectos a Connexo"
-          hint="En Prospectos, selecciona los que quieras y usa «Enviar a Connexo». Connexo arma un perfil borrador de cada uno y aquí lo verás."
+          hint="En Prospectos, selecciona los que quieras y usa «Armar lote para Connexo». Connexo arma un perfil borrador de cada uno y aquí verás cada lote."
           action={<Link to="/prospectos"><Button variant="secondary" size="sm">Ir a Prospectos</Button></Link>}
         />
       ) : (
         <>
           <AprendizajeConnexo envios={envios} />
 
+          <LotesPanel
+            lotes={lotes ?? []}
+            envios={envios}
+            seleccionado={loteSel}
+            onSeleccionar={elegirLote}
+            onAprobar={(lote, lista) => setAprobarLote({ lote, lista })}
+            onWhatsApp={(_, lista) => setWaLista(lista)}
+            onRenombrar={(lote) => { setRenombrando(lote); setNombreNuevo(lote.nombre ?? ''); }}
+            sinCupo={!!hayCupo && cupo?.disponibles === 0}
+            ocupado={revisar.isPending || enviarWa.isPending}
+          />
+
           <div className="mb-3 flex flex-wrap items-center gap-1.5 text-xs">
-            <FiltroChip activo={filtro === 'todos'} onClick={() => setFiltro('todos')}>Todos · {envios.length}</FiltroChip>
+            <FiltroChip activo={filtro === 'todos'} onClick={() => setFiltro('todos')}>Todos · {delLote.length}</FiltroChip>
             {(Object.keys(ESTADO_CONNEXO) as ConnexoEstado[]).filter((k) => conteo[k]).map((k) => (
               <FiltroChip key={k} activo={filtro === k} onClick={() => setFiltro(k)}>
                 {ESTADO_CONNEXO[k].label} · {conteo[k]}
@@ -175,7 +221,7 @@ export default function Connexo() {
               <Button size="sm" onClick={() => enBloque('aprobar', aprobables)} disabled={!aprobables.length} loading={revisar.isPending}>
                 <CheckCheck className="h-4 w-4" /> Aprobar{aprobables.length ? ` (${aprobables.length})` : ''}
               </Button>
-              <Button size="sm" onClick={() => setConfirmarWa(true)} disabled={!paraWhatsApp.length || (hayCupo && cupo.disponibles === 0)}>
+              <Button size="sm" onClick={() => setWaLista(paraWhatsApp)} disabled={!paraWhatsApp.length || (hayCupo && cupo.disponibles === 0)}>
                 <MessageCircle className="h-4 w-4" /> Enviar por WhatsApp{paraWhatsApp.length ? ` (${paraWhatsApp.length})` : ''}
               </Button>
               <Button size="sm" variant="danger" onClick={() => setConfirmarDescarte(true)} disabled={!descartables.length}>
@@ -187,6 +233,9 @@ export default function Connexo() {
             </div>
           )}
 
+          {loteElegido && (
+            <p className="mb-2 text-xs text-ink-secondary">Viendo solo <strong className="text-ink-primary">{etiquetaLote(loteElegido)}</strong>.</p>
+          )}
           <Table>
             <THead>
               <tr>
@@ -197,6 +246,7 @@ export default function Connexo() {
                 </TH>
                 <TH>Negocio</TH>
                 <TH>Plantilla</TH>
+                <TH className="hidden lg:table-cell">Lote</TH>
                 <TH className="hidden xl:table-cell">Búsqueda</TH>
                 <TH>Estado</TH>
                 <TH>Enviado</TH>
@@ -228,6 +278,13 @@ export default function Connexo() {
                       <div className="text-xs text-ink-muted">{[e.categoria, e.prospect_ciudad].filter(Boolean).join(' · ') || '—'}</div>
                     </TD>
                     <TD className="text-ink-secondary">{e.connexo_theme ? (PLANTILLA_CONNEXO[e.connexo_theme] ?? e.connexo_theme) : '—'}</TD>
+                    <TD className="hidden text-ink-secondary lg:table-cell">
+                      {e.lote_id && loteDe.get(e.lote_id) ? (
+                        <button type="button" onClick={() => elegirLote(e.lote_id)} className="num rounded border border-line px-1.5 py-0.5 text-xs hover:border-accent/50 hover:text-ink-primary" title={etiquetaLote(loteDe.get(e.lote_id)!)}>
+                          L{loteDe.get(e.lote_id)!.numero}
+                        </button>
+                      ) : '—'}
+                    </TD>
                     <TD className="hidden text-ink-secondary xl:table-cell">{e.busqueda_nombre ?? '—'}</TD>
                     <TD>
                       <span title={e.detalle ?? info.hint}><Badge variant={info.variant}>{info.label}</Badge></span>
@@ -251,34 +308,86 @@ export default function Connexo() {
       {revisando && <RevisionModal envio={revisando} onClose={() => setRevisando(null)} />}
 
       <Modal
-        open={confirmarWa}
-        onClose={() => setConfirmarWa(false)}
+        open={!!waLista}
+        onClose={() => setWaLista(null)}
         size="sm"
         title="Enviar por WhatsApp"
         footer={
           <>
-            <Button variant="ghost" size="sm" onClick={() => setConfirmarWa(false)}>Cancelar</Button>
-            <Button size="sm" onClick={() => mandarWhatsApp(paraWhatsApp)} loading={enviarWa.isPending}>
-              <MessageCircle className="h-4 w-4" /> Enviar {Math.min(paraWhatsApp.length, hayCupo ? cupo.disponibles ?? paraWhatsApp.length : paraWhatsApp.length)}
+            <Button variant="ghost" size="sm" onClick={() => setWaLista(null)}>Cancelar</Button>
+            <Button size="sm" onClick={() => waLista && mandarWhatsApp(waLista)} loading={enviarWa.isPending}>
+              <MessageCircle className="h-4 w-4" /> Enviar {Math.min(waLista?.length ?? 0, hayCupo ? cupo.disponibles ?? (waLista?.length ?? 0) : (waLista?.length ?? 0))}
             </Button>
           </>
         }
       >
         <div className="space-y-2 text-sm text-ink-secondary">
           <p>
-            Se enviará el saludo inicial a <strong className="text-ink-primary">{paraWhatsApp.length}</strong> negocio(s) desde el WhatsApp de Connexo,
+            Se enviará el saludo inicial a <strong className="text-ink-primary">{waLista?.length ?? 0}</strong> negocio(s) desde el WhatsApp de Connexo,
             con dos botones: «¡Sí, enviar demo!» y «Ver más tarde».
           </p>
           <p>
             Solo si tocan «¡Sí, enviar demo!», Connexo activa su perfil, empieza su prueba de 7 días y les manda su enlace con usuario y clave. Si piden
             que no les escriban, no se les vuelve a contactar.
           </p>
+          <p>A quien ya recibió este saludo (o comparte su celular con otro negocio que lo recibió) no se le envía de nuevo.</p>
           {hayCupo && (
-            <p className={paraWhatsApp.length > (cupo.disponibles ?? 0) ? 'text-warning' : ''}>
+            <p className={(waLista?.length ?? 0) > (cupo.disponibles ?? 0) ? 'text-warning' : ''}>
               Hoy quedan <strong>{cupo.disponibles}</strong> de {cupo.limite} envíos.
-              {paraWhatsApp.length > (cupo.disponibles ?? 0) && ' Los que no quepan siguen aprobados y los envías mañana.'}
+              {(waLista?.length ?? 0) > (cupo.disponibles ?? 0) && ' Los que no quepan siguen aprobados y los envías mañana.'}
             </p>
           )}
+        </div>
+      </Modal>
+
+      <Modal
+        open={!!aprobarLote}
+        onClose={() => setAprobarLote(null)}
+        size="sm"
+        title="Aprobar el lote"
+        footer={
+          <>
+            <Button variant="ghost" size="sm" onClick={() => setAprobarLote(null)}>Cancelar</Button>
+            <Button
+              size="sm"
+              loading={revisar.isPending}
+              onClick={async () => { if (aprobarLote) { await enBloque('aprobar', aprobarLote.lista); setAprobarLote(null); } }}
+            >
+              <CheckCheck className="h-4 w-4" /> Aprobar {aprobarLote?.lista.length ?? 0}
+            </Button>
+          </>
+        }
+      >
+        <p className="text-sm text-ink-secondary">
+          Vas a aprobar <strong className="text-ink-primary">{aprobarLote?.lista.length ?? 0}</strong> borrador(es) de{' '}
+          <strong className="text-ink-primary">{aprobarLote ? etiquetaLote(aprobarLote.lote) : ''}</strong> de una vez. Aprobar no envía nada:
+          solo los deja listos para el WhatsApp. Antes, abre algunos con «Revisar» para ver cómo quedaron.
+        </p>
+      </Modal>
+
+      <Modal
+        open={!!renombrando}
+        onClose={() => setRenombrando(null)}
+        size="sm"
+        title="Nombre del lote"
+        footer={
+          <>
+            <Button variant="ghost" size="sm" onClick={() => setRenombrando(null)}>Cancelar</Button>
+            <Button size="sm" onClick={guardarNombre} loading={renombrar.isPending}>Guardar</Button>
+          </>
+        }
+      >
+        <div className="space-y-2">
+          <Input
+            id="renombrar-lote"
+            label={renombrando ? `Lote ${renombrando.numero}` : 'Lote'}
+            placeholder="Ej.: Gimnasios Quito"
+            value={nombreNuevo}
+            maxLength={80}
+            onChange={(e) => setNombreNuevo(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') guardarNombre(); }}
+          />
+          <p className="text-xs text-ink-muted">El número no cambia. Connexo recibe el nombre nuevo en cuanto se actualice.</p>
         </div>
       </Modal>
 

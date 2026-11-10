@@ -49,6 +49,7 @@ export function rowToProspect(row: JoinedRow): Prospect {
     plan_sugerido: (row.plan_sugerido as PlanSugerido | null) ?? undefined,
     status: row.status,
     opt_out: Boolean(row.opt_out),
+    connexo_estado: row.connexo_estado ?? undefined,
     source_nombre: row.sources?.nombre ?? undefined,
     source_url: row.source_url ?? undefined,
     first_seen_at: row.first_seen_at,

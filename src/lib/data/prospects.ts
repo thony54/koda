@@ -38,7 +38,18 @@ export interface ProspectFilters {
   encontrados?: Encontrados;
   /** Solo los que la(s) búsqueda(s) CREARON, no los que ya existían. */
   soloNuevos?: boolean;
+  /**
+   * Solo la cuenta propietaria. 'disponibles' = los que todavía se pueden ofrecer a Connexo (nunca enviados, o cuyo
+   * envío falló); 'en_connexo' = los que ya están en el embudo (enviados, rechazados, vencidos o con celular repetido).
+   * Sin valor = todos.
+   */
+  connexo?: 'disponibles' | 'en_connexo';
+  /** Solo los que tienen un celular de Ecuador (+5939…): los únicos que reciben el WhatsApp. */
+  conCelular?: boolean;
 }
+
+/** Estados de Connexo en los que el negocio nunca llegó a ver nada: siguen contando como «disponibles». */
+const CONNEXO_REINTENTABLES = '(error,sin_plantilla)';
 
 export type SortField = 'score' | 'nombre' | 'ciudad' | 'reviews_count' | 'last_seen_at';
 export type SortDir = 'asc' | 'desc';
@@ -114,6 +125,12 @@ export async function listProspects(params: ListParams = {}): Promise<ListResult
   if (f.tipo?.length) query = query.in('tipo', f.tipo);
   if (f.status?.length) query = query.in('status', f.status);
   if (f.tieneWeb) query = query.eq('tiene_website', f.tieneWeb === 'si');
+  if (f.connexo === 'disponibles') query = query.or(`connexo_estado.is.null,connexo_estado.in.${CONNEXO_REINTENTABLES}`);
+  if (f.connexo === 'en_connexo') {
+    query = query.not('connexo_estado', 'is', null).not('connexo_estado', 'in', CONNEXO_REINTENTABLES);
+  }
+  // Celular de Ecuador: lo normaliza el collector a +5939…; las importaciones a mano pueden traerlo como 09…
+  if (f.conCelular) query = query.or('whatsapp.like.+5939%,whatsapp.like.09%');
   if (f.source?.length) {
     const ids = await resolveSourceIds(f.source);
     query = query.in('source_id', ids.length ? ids : ['00000000-0000-0000-0000-000000000000']);
@@ -152,6 +169,15 @@ export async function listProspects(params: ListParams = {}): Promise<ListResult
     page,
     pageSize,
   };
+}
+
+/** Cuántos prospectos ya están en el embudo de Connexo (los que la lista oculta por defecto al propietario). */
+export async function contarEnConnexo(): Promise<number> {
+  const { count, error } = await byOwner(db.from('prospects').select('id', { count: 'exact', head: true }))
+    .not('connexo_estado', 'is', null)
+    .not('connexo_estado', 'in', CONNEXO_REINTENTABLES);
+  if (error) throw error;
+  return count ?? 0;
 }
 
 export async function getProspect(id: string): Promise<Prospect | null> {

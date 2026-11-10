@@ -1,9 +1,10 @@
-import { Search, X, Sparkles } from 'lucide-react';
+import { Search, X, Sparkles, Smartphone } from 'lucide-react';
 import { MultiSelect, type Option } from '@/components/ui';
 import type { ProspectFilters, Encontrados } from '@/lib/data/prospects';
 import type { ProspectType, ProspectStatus } from '@/types/domain';
 import type { ScoreBand } from './ScoreBadge';
-import { useCorridaInfo, useFilterFacets } from '@/hooks/useProspects';
+import { useCorridaInfo, useFilterFacets, useProspectosEnConnexo } from '@/hooks/useProspects';
+import { useAuth } from '@/hooks/useAuth';
 import { formatDateTime, timeAgo } from '@/lib/format';
 
 export const TIPO_LABEL: Record<ProspectType, string> = {
@@ -58,10 +59,20 @@ const ENCONTRADOS_LABEL: Record<Encontrados, string> = {
 interface FiltersProps {
   value: ProspectFilters;
   onChange: (next: ProspectFilters) => void;
+  /** Filtros de partida: «Limpiar» vuelve aquí (p. ej. el propietario arranca viendo solo lo que aún puede enviar a Connexo). */
+  base?: ProspectFilters;
 }
 
-export function Filters({ value, onChange }: FiltersProps) {
+const CONNEXO_VISTAS: { valor: ProspectFilters['connexo']; label: string; hint: string }[] = [
+  { valor: 'disponibles', label: 'Para Connexo', hint: 'Los que todavía no se han enviado a Connexo' },
+  { valor: 'en_connexo', label: 'Ya en Connexo', hint: 'Enviados, rechazados, vencidos o con un celular que ya está en Connexo' },
+  { valor: undefined, label: 'Todos', hint: 'Toda la base, estén o no en Connexo' },
+];
+
+export function Filters({ value, onChange, base = {} }: FiltersProps) {
   const { data: facets } = useFilterFacets();
+  const { isOwner } = useAuth();
+  const { data: enConnexo } = useProspectosEnConnexo(isOwner);
 
   const ciudadOptions: Option[] = (facets?.ciudades ?? []).map((c) => ({ value: c, label: c }));
   const sourceOptions: Option[] = (facets?.sources ?? []).map((s) => ({ value: s, label: s }));
@@ -90,6 +101,8 @@ export function Filters({ value, onChange }: FiltersProps) {
     (value.corrida ? 1 : 0) +
     (value.soloNuevos ? 1 : 0) +
     (value.tieneWeb ? 1 : 0) +
+    (value.conCelular ? 1 : 0) +
+    (value.connexo !== base.connexo ? 1 : 0) +
     (value.search ? 1 : 0);
   const porBusqueda = Boolean(value.busqueda?.length || value.encontrados || value.corrida);
 
@@ -122,6 +135,42 @@ export function Filters({ value, onChange }: FiltersProps) {
         />
       </div>
 
+      {/* Solo la cuenta propietaria: lo que ya se envió a Connexo (o rechazó) no vuelve a salir como candidato. */}
+      {isOwner && (
+        <div className="flex h-9 items-center rounded-md border border-line-strong bg-surface-inset p-0.5 text-[13px]" role="group" aria-label="Estado en Connexo">
+          {CONNEXO_VISTAS.map((v) => {
+            const activa = value.connexo === v.valor;
+            return (
+              <button
+                key={v.label}
+                type="button"
+                aria-pressed={activa}
+                title={v.hint}
+                onClick={() => set('connexo', v.valor)}
+                className={`h-full rounded px-2.5 transition-colors ${activa ? 'bg-accent/15 text-accent-text' : 'text-ink-secondary hover:text-ink-primary'}`}
+              >
+                {v.label}
+                {v.valor === 'en_connexo' && enConnexo ? <span className="num ml-1 text-ink-muted">{enConnexo}</span> : null}
+              </button>
+            );
+          })}
+        </div>
+      )}
+      {isOwner && (
+        <button
+          type="button"
+          aria-pressed={Boolean(value.conCelular)}
+          onClick={() => set('conCelular', value.conCelular ? undefined : true)}
+          className={`inline-flex h-9 items-center gap-1.5 rounded-md border px-3 text-[13px] transition-colors ${
+            value.conCelular
+              ? 'border-accent bg-accent/15 text-accent-text'
+              : 'border-line-strong bg-surface-inset text-ink-secondary hover:text-ink-primary'
+          }`}
+          title="Solo los que tienen un celular de Ecuador: son los únicos que reciben el WhatsApp"
+        >
+          <Smartphone className="h-3.5 w-3.5" /> Con celular
+        </button>
+      )}
       <MultiSelect label="Búsqueda" menuWidth="w-80" options={busquedaOptions} value={value.busqueda ?? []} onChange={(v) => set('busqueda', v.length ? v : undefined)} />
       <MultiSelect
         label="Encontrados"
@@ -154,7 +203,7 @@ export function Filters({ value, onChange }: FiltersProps) {
 
       {activeCount > 0 && (
         <button
-          onClick={() => onChange({})}
+          onClick={() => onChange(base)}
           className="flex h-9 items-center gap-1.5 rounded-md px-2.5 text-[13px] text-ink-muted transition-colors hover:bg-veil/[0.06] hover:text-ink-primary"
         >
           <X className="h-3.5 w-3.5" /> Limpiar ({activeCount})

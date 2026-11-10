@@ -6,6 +6,7 @@ import { TIPO_LABEL, STATUS_LABEL } from './Filters';
 import type { Prospect } from '@/types/domain';
 import type { SortField, SortDir } from '@/lib/data/prospects';
 import { timeAgo } from '@/lib/format';
+import { estadoEnConnexo } from '@/lib/data/connexo';
 import { useAuth } from '@/hooks/useAuth';
 
 const statusVariant: Record<string, 'default' | 'success' | 'warning' | 'info' | 'primary' | 'error'> = {
@@ -18,6 +19,17 @@ const statusVariant: Record<string, 'default' | 'success' | 'warning' | 'info' |
   descartado: 'default',
   no_contactar: 'error',
 };
+
+/** Dónde va este prospecto en Connexo (solo la cuenta propietaria): así se ve de un vistazo a quién ya se le ofreció. */
+function EtiquetaConnexo({ estado }: { estado?: string }) {
+  const info = estadoEnConnexo(estado);
+  if (!info) return null;
+  return (
+    <span title={info.hint} className="inline-flex">
+      <Badge variant={info.variant}>{info.label}</Badge>
+    </span>
+  );
+}
 
 interface Props {
   rows: Prospect[];
@@ -98,7 +110,10 @@ export function ProspectTable({
                 />
               </TD>
               <TD>
-                <div className="font-medium text-ink-primary">{p.nombre}</div>
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                  <span className="font-medium text-ink-primary">{p.nombre}</span>
+                  {isOwner && <EtiquetaConnexo estado={p.connexo_estado} />}
+                </div>
                 <div className="mt-0.5 text-xs capitalize text-ink-muted">{p.categoria}</div>
               </TD>
               <TD>

@@ -122,6 +122,8 @@ export interface ProspectRow {
   plan_sugerido: string | null;
   status: ProspectStatus;
   opt_out: boolean | null;
+  /** Espejo del estado del envío a Connexo (migración 0015): null = nunca se envió; 'duplicado' = otro prospecto con su celular ya está. */
+  connexo_estado?: string | null;
   source_id: string | null;
   source_url: string | null;
   first_seen_at: string;

@@ -87,6 +87,8 @@ export interface Prospect {
   plan_sugerido?: PlanSugerido;
   status: ProspectStatus;
   opt_out: boolean;
+  /** Estado de su envío a Connexo, o 'duplicado' si otro prospecto con su mismo celular ya está allá (solo lo ve el propietario). */
+  connexo_estado?: string;
 
   // trazabilidad y asignación
   source_nombre?: string;

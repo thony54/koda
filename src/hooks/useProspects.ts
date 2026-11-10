@@ -5,6 +5,7 @@ import {
   updateProspect,
   getFilterFacets,
   getCorridaInfo,
+  contarEnConnexo,
   type ListParams,
 } from '@/lib/data/prospects';
 import type { Prospect } from '@/types/domain';
@@ -14,6 +15,16 @@ export function useProspects(params: ListParams) {
     queryKey: ['prospects', params],
     queryFn: () => listProspects(params),
     placeholderData: keepPreviousData,
+  });
+}
+
+/** Cuántos prospectos ya están en Connexo (lo que la lista oculta por defecto al propietario). */
+export function useProspectosEnConnexo(enabled: boolean) {
+  return useQuery({
+    queryKey: ['prospectos-en-connexo'],
+    queryFn: contarEnConnexo,
+    enabled,
+    staleTime: 30_000,
   });
 }
 

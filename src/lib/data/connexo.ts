@@ -38,6 +38,23 @@ export const ESTADO_CONNEXO: Record<ConnexoEstado, { label: string; variant: Var
   error:         { label: 'Error',         variant: 'error',   hint: 'Falló el envío; se puede reintentar.' },
 };
 
+/**
+ * Qué decir de un PROSPECTO según su espejo en Connexo (`prospects.connexo_estado`, migración 0015).
+ * `disponible` = todavía se le puede ofrecer Connexo (nunca llegó a ver nada: error o sin plantilla).
+ * 'duplicado' = otro prospecto con su mismo celular ya está en Connexo, así que a este tampoco se le escribe.
+ */
+export function estadoEnConnexo(
+  estado: string | null | undefined,
+): { label: string; variant: Variante; hint: string; disponible: boolean } | null {
+  if (!estado) return null;
+  if (estado === 'duplicado') {
+    return { label: 'Mismo celular', variant: 'warning', hint: 'Otro negocio con este mismo celular ya está en Connexo: no se le escribe dos veces.', disponible: false };
+  }
+  const e = ESTADO_CONNEXO[estado as ConnexoEstado];
+  if (!e) return null;
+  return { ...e, disponible: estado === 'error' || estado === 'sin_plantilla' };
+}
+
 export interface ConnexoEnvio {
   id: string;
   owner_id: string;
@@ -48,6 +65,7 @@ export interface ConnexoEnvio {
   rubro: string | null;
   job_id: string | null;
   busqueda_nombre: string | null;
+  lote_id: string | null;
   estado: ConnexoEstado;
   detalle: string | null;
   connexo_username: string | null;
@@ -59,22 +77,75 @@ export interface ConnexoEnvio {
 export async function listEnvios(): Promise<ConnexoEnvio[]> {
   const { data, error } = await byOwner(
     db.from('connexo_envios')
-      .select('id, owner_id, prospect_id, prospect_nombre, prospect_ciudad, categoria, rubro, job_id, busqueda_nombre, estado, detalle, connexo_username, connexo_theme, enviado_at, actualizado_at')
+      .select('id, owner_id, prospect_id, prospect_nombre, prospect_ciudad, categoria, rubro, job_id, busqueda_nombre, lote_id, estado, detalle, connexo_username, connexo_theme, enviado_at, actualizado_at')
       .order('enviado_at', { ascending: false })
-      .limit(500),
+      .limit(1000),
   );
   if (error) throw new Error(error.message);
   return (data ?? []) as ConnexoEnvio[];
 }
 
+// ── Lotes ───────────────────────────────────────────────────────────────────
+// Cada vez que mandas prospectos a Connexo se arma un lote («Lote 7 · Gimnasios Quito»). El lote viaja con cada
+// negocio, así lo controlas igual en KODA y en el Super Admin de Connexo.
+
+export interface ConnexoLote {
+  id: string;
+  numero: number;
+  nombre: string | null;
+  created_at: string;
+  /** Cuándo Connexo recibió el número y el nombre de este lote (null = falta; se manda al abrir la pantalla de Connexo). */
+  sincronizado_at: string | null;
+}
+
+/** «Lote 7 · Gimnasios Quito» (o solo «Lote 7» si no tiene nombre). */
+export const etiquetaLote = (l: Pick<ConnexoLote, 'numero' | 'nombre'>): string =>
+  l.nombre ? `Lote ${l.numero} · ${l.nombre}` : `Lote ${l.numero}`;
+
+export async function listLotes(): Promise<ConnexoLote[]> {
+  const { data, error } = await db.from('connexo_lotes')
+    .select('id, numero, nombre, created_at, sincronizado_at')
+    .order('numero', { ascending: false })
+    .limit(200);
+  if (error) throw new Error(error.message);
+  return (data ?? []) as ConnexoLote[];
+}
+
+export async function renombrarLote(loteId: string, nombre: string): Promise<void> {
+  await invokeConnexo({ action: 'lote_renombrar', lote_id: loteId, nombre });
+}
+
+/** Por qué un prospecto no sale en el lote (ver supabase/functions/_shared/connexoEnvio.ts). */
+export type CodigoOmision =
+  | 'ajeno' | 'opt_out' | 'anonimizado' | 'status' | 'ya_enviado' | 'sin_celular' | 'sin_rubro'
+  | 'celular_repetido' | 'repetido_en_lote' | 'no_existe';
+
+export const TITULO_OMISION: Record<CodigoOmision, string> = {
+  ya_enviado: 'Ya están en Connexo',
+  celular_repetido: 'Su celular ya está en Connexo',
+  repetido_en_lote: 'Repetidos dentro del lote',
+  sin_celular: 'Sin celular con WhatsApp',
+  sin_rubro: 'Sin rubro reconocido',
+  opt_out: 'Pidieron no ser contactados',
+  status: 'Marcados como descartado / no contactar',
+  anonimizado: 'Datos anonimizados',
+  ajeno: 'No son tuyos',
+  no_existe: 'Ya no existen',
+};
+
 export interface ResultadoEnvio {
   prospect_id: string;
   nombre?: string;
-  resultado: 'enviado' | 'omitido' | 'error';
+  resultado: 'enviado' | 'omitido' | 'error' | 'listo';
   motivo?: string;
+  codigo?: CodigoOmision;
   estado?: ConnexoEstado;
   username?: string | null;
   theme?: string | null;
+  /** Solo en la vista previa: rubro de KODA que decide la plantilla. */
+  rubro?: string | null;
+  categoria?: string | null;
+  ciudad?: string | null;
 }
 
 /**
@@ -82,21 +153,49 @@ export interface ResultadoEnvio {
  * llamadas encadenadas («Rate limit exceeded for trace»), así que se manda en tandas de 25 una tras otra.
  */
 const TANDA_PUENTE = 25;
-const enTandas = <T,>(xs: T[]): T[][] => {
+const enTandas = <T,>(xs: T[], n = TANDA_PUENTE): T[][] => {
   const out: T[][] = [];
-  for (let i = 0; i < xs.length; i += TANDA_PUENTE) out.push(xs.slice(i, i + TANDA_PUENTE));
+  for (let i = 0; i < xs.length; i += n) out.push(xs.slice(i, i + n));
   return out;
 };
 
-export async function enviarAConnexo(prospectIds: string[]): Promise<{ enviados: number; resultados: ResultadoEnvio[] }> {
-  let enviados = 0;
+/** Vista previa de un lote: qué saldría y por qué se omite el resto. No envía nada ni toca la base. */
+export async function vistaPreviaEnvio(prospectIds: string[]): Promise<ResultadoEnvio[]> {
   const resultados: ResultadoEnvio[] = [];
-  for (const tanda of enTandas(prospectIds)) {
-    const r = await invokeConnexo<{ enviados: number; resultados: ResultadoEnvio[] }>({ action: 'enviar', prospect_ids: tanda });
-    enviados += r.enviados;
+  // Se pide por tandas de 200 (tope de la función); dentro de cada una ya se detectan los celulares repetidos.
+  for (const tanda of enTandas(prospectIds, 200)) {
+    const r = await invokeConnexo<{ resultados: ResultadoEnvio[] }>({ action: 'enviar', dry_run: true, prospect_ids: tanda });
     resultados.push(...r.resultados);
   }
-  return { enviados, resultados };
+  return resultados;
+}
+
+export interface LoteCreado { id: string; numero: number; nombre: string | null }
+
+/**
+ * Envía los prospectos a Connexo dentro de UN lote: el primero que se pueda enviar lo abre y las tandas siguientes
+ * lo siguen llenando. `onProgreso` avisa cuántos ya se procesaron.
+ */
+export async function enviarAConnexo(
+  prospectIds: string[],
+  nombreLote?: string,
+  onProgreso?: (hechos: number, total: number) => void,
+): Promise<{ enviados: number; resultados: ResultadoEnvio[]; lote: LoteCreado | null }> {
+  let enviados = 0;
+  let lote: LoteCreado | null = null;
+  const resultados: ResultadoEnvio[] = [];
+  for (const tanda of enTandas(prospectIds)) {
+    const r: { enviados: number; resultados: ResultadoEnvio[]; lote: LoteCreado | null } = await invokeConnexo({
+      action: 'enviar',
+      prospect_ids: tanda,
+      lote: lote ? { id: lote.id } : { nombre: nombreLote },
+    });
+    lote = r.lote ?? lote;
+    enviados += r.enviados;
+    resultados.push(...r.resultados);
+    onProgreso?.(resultados.length, prospectIds.length);
+  }
+  return { enviados, resultados, lote };
 }
 
 /** Pregunta a Connexo cómo van los envíos y actualiza el espejo local. */

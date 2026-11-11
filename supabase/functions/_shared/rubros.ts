@@ -92,11 +92,17 @@ const ES_TIENDA = /(^| )store$/;
 // Cuando Google (o un CSV) pone un tipo genérico —«manufacturer», «service», «establishment»…— la categoría
 // no dice el nicho, pero el NOMBRE casi siempre sí («Imprenta Quantica», «Quik Print»). Solo se consulta si la
 // categoría no se reconoció. El orden importa: gana la primera que coincide.
+// Fotógrafos (incluye los que Google nombra en inglés: «Wedding Photographer», «Photostudio»), psicólogos, nutricionistas y coaches.
+const PISTA_PROFESIONALES = /fotograf|photograph|photo ?studio|psicolog|nutricion|nutriolog|dietist|\bcoach\b/;
+// Tipos genéricos que Google pone a un profesional independiente (un nutricionista sale como «consultant»): si el NOMBRE
+// dice su oficio, manda el nombre y no la categoría (si no, un nutricionista recibiría la plantilla de Ecommerce).
+const CATEGORIAS_GENERICAS = new Set(['consultant', 'consulting', 'company', 'office', 'corporate office', 'service', 'establishment']);
+
 const PISTAS_DE_NOMBRE: [string, RegExp][] = [
   ['sublimados', /imprent|print|sublim|serigraf|estampad|gigantograf|rotulo|copiad|bordad/],
   ['librerias', /libreria|\blibros\b|bookstore|bookshop/],
   ['musicos', /\bmusic|sonido|grabacion|mariachi|orquesta|\bdj\b|conservatorio|rockademia|escuela de rock/],
-  ['profesionales', /fotograf|psicolog|nutricion|\bcoach\b/],
+  ['profesionales', PISTA_PROFESIONALES],
   ['belleza', /barber|peluquer|salon de belleza|centro de estetica|\bnails?\b|manicur|\bspa\b/],
   ['salud', /clinica|consultorio|dental|odontolog|\bmedic|laboratorio clinico/],
   ['gimnasios', /\bgym\b|gimnasio|fitness|crossfit/],
@@ -115,6 +121,7 @@ const PISTAS_DE_NOMBRE: [string, RegExp][] = [
 export function rubroDe(categoria: string | null | undefined, nombre?: string | null): string | null {
   if (categoria) {
     const n = norm(categoria);
+    if (nombre && CATEGORIAS_GENERICAS.has(n) && PISTA_PROFESIONALES.test(norm(nombre))) return 'profesionales';
     const directo = POR_VALOR.get(n);
     if (directo) return directo;
     if (ES_RESTAURANTE.test(n)) return 'restaurantes';

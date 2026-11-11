@@ -325,7 +325,7 @@ export const falloWhatsApp = (e: Pick<ConnexoEnvio, 'estado' | 'detalle'>): bool
 
 export const PLANTILLA_CONNEXO: Record<string, string> = {
   default: 'Estándar', barber: 'Barbería', gastro: 'Gastronomía', petcare: 'Mascotas', medical: 'Salud',
-  ecom: 'Ecommerce', stage: 'Artista', realty: 'Inmobiliaria', sublima: 'Sublimados', gym: 'Gimnasio', hotel: 'Hotel', books: 'Librería',
+  ecom: 'Ecommerce', stage: 'Artista', realty: 'Inmobiliaria', sublima: 'Sublimados', gym: 'Gimnasio', hotel: 'Hotel', books: 'Librería', photo: 'Fotografía',
 };
 
 // Campos del perfil de Connexo → cómo se le muestra a quien revisa. Lo que no está aquí no se lista.

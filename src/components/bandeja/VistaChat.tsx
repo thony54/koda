@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Archive, ArchiveRestore, ArrowDown, ArrowLeft, Loader2, Mail, PanelRight, RefreshCw } from 'lucide-react';
+import { Archive, ArchiveRestore, ArrowDown, ArrowLeft, Bot, BotOff, Loader2, Mail, PanelRight, RefreshCw, Sparkles } from 'lucide-react';
 import { Badge } from '@/components/ui';
 import { ESTADO_CONNEXO, type ConnexoEstado } from '@/lib/data/connexo';
 import type { Conversacion, Mensaje } from '@/lib/data/bandeja';
@@ -9,6 +9,8 @@ import {
   abrirHilo, archivar, cargarAnteriores, enviarArchivo, enviarTexto, marcarComoLeida, marcarComoNoLeida, reintentarEnvio,
 } from '@/lib/bandeja/acciones';
 import { prepararArchivo, type ArchivoListo } from '@/lib/bandeja/medios';
+import { cargarAgente, descartarBorrador, otraVersion, pausarEnChat } from '@/lib/bandeja/agenteAcciones';
+import { useAgenteStore } from '@/store/agenteStore';
 import { etiquetaDia } from '@/lib/bandeja/formato';
 import { armarHilo, separarReacciones, textoRestante, tituloConversacion, ventana } from '@/lib/bandeja/orden';
 import { formatPhoneEC } from '@/lib/format';
@@ -16,6 +18,7 @@ import { useUIStore } from '@/store/uiStore';
 import { Avatar } from './piezas';
 import { Burbuja } from './Burbuja';
 import { Compositor } from './Compositor';
+import { BorradorAgenteCard } from './BorradorAgente';
 import { PreviaAdjunto } from './PreviaAdjunto';
 
 const CERCA_DEL_FONDO_PX = 120;
@@ -50,6 +53,12 @@ export function VistaChat({ conv, onVolver, panelAbierto, onPanel }: { conv: Con
   const [forzado, setForzado] = useState(false);
   const [adjunto, setAdjunto] = useState<ArchivoListo | null>(null);
   const [arrastrando, setArrastrando] = useState(false);
+  // Agente de respuestas (migración 0017)
+  const borrador = useAgenteStore((s) => s.borradores[conv.id]);
+  const generando = useAgenteStore((s) => !!s.generando[conv.id]);
+  const modoAgente = useAgenteStore((s) => s.config?.modo);
+  const [sugerencia, setSugerencia] = useState<{ clave: number; id: string; texto: string } | null>(null);
+  const [enviandoBorrador, setEnviandoBorrador] = useState(false);
   const contenedor = useRef<HTMLDivElement>(null);
   const alFondo = useRef(true);
   const previo = useRef<{ primero: string | null; ultimo: string | null; alto: number; top: number; n: number }>({ primero: null, ultimo: null, alto: 0, top: 0, n: 0 });
@@ -131,6 +140,28 @@ export function VistaChat({ conv, onVolver, panelAbierto, onPanel }: { conv: Con
   const estado = conv.envio?.estado ? ESTADO_CONNEXO[conv.envio.estado as ConnexoEstado] : undefined;
   const detalle = [conv.envio?.rubro, conv.envio?.prospect_ciudad].filter(Boolean).join(' · ');
 
+  // ── Borrador del agente: enviar tal cual, editar, otra versión o descartar ──
+  const forzarEnvio = forzado && !v.abierta;
+  async function enviarBorrador() {
+    if (!borrador?.texto) return;
+    setEnviandoBorrador(true);
+    useAgenteStore.getState().quitarBorrador(conv.id, borrador.id);        // desaparece al instante; si el servidor lo rechaza, vuelve
+    const r = await enviarTexto(conv.id, borrador.texto, null, forzarEnvio, borrador.id);
+    setEnviandoBorrador(false);
+    if (r.rechazado) { toast(r.error ?? 'No se pudo enviar el borrador.', 'error'); void cargarAgente(); }
+    else if (!r.ok && r.incierto) toast(r.error ?? 'No se pudo confirmar el envío.', 'warning');
+  }
+  function editarBorrador() {
+    if (!borrador?.texto) return;
+    setSugerencia((s) => ({ clave: (s?.clave ?? 0) + 1, id: borrador.id, texto: borrador.texto ?? '' }));
+  }
+  async function pedirBorrador() {
+    const r = await otraVersion(conv.id);
+    if (r.error) toast(r.error, r.sin_clave ? 'warning' : 'error');
+    else if (r.estado === 'omitido' || r.estado === 'obsoleto') toast(`El agente no redactó nada: ${r.motivo ?? 'no conviene responder'}.`, 'warning');
+  }
+  const puedeSugerir = !!modoAgente && modoAgente !== 'apagado' && v.abierta && conv.ultimo_dir === 'entrante' && !borrador;
+
   // Enviar un archivo (de la vista previa o una nota de voz): aparece al instante; si el servidor lo rechaza, se avisa.
   const puedeEscribir = !bloqueo || forzado;
   const mandarArchivo = (a: ArchivoListo, pie: string) => {
@@ -175,6 +206,17 @@ export function VistaChat({ conv, onVolver, panelAbierto, onPanel }: { conv: Con
         </div>
         {conv.prospect_id && (
           <Link to={`/prospectos/${conv.prospect_id}`} className="hidden rounded-md border border-line px-2.5 py-1.5 text-[12px] font-medium text-ink-secondary hover:bg-veil/[0.06] hover:text-ink-primary sm:inline-block">Ver prospecto</Link>
+        )}
+        {modoAgente && modoAgente !== 'apagado' && (
+          <button
+            onClick={() => void pausarEnChat(conv.id, !conv.agente_pausado)}
+            className={`rounded-md p-2 hover:bg-veil/[0.06] ${conv.agente_pausado ? 'text-warning' : 'text-ink-muted hover:text-ink-primary'}`}
+            title={conv.agente_pausado ? 'El agente está en pausa en este chat: toca para reanudarlo' : 'Pausar el agente en este chat (tú tomas la conversación)'}
+            aria-label={conv.agente_pausado ? 'Reanudar el agente en este chat' : 'Pausar el agente en este chat'}
+            aria-pressed={!!conv.agente_pausado}
+          >
+            {conv.agente_pausado ? <BotOff className="h-4 w-4" /> : <Bot className="h-4 w-4" />}
+          </button>
         )}
         <button onClick={() => void marcarComoNoLeida(conv.id)} className="rounded-md p-2 text-ink-muted hover:bg-veil/[0.06] hover:text-ink-primary" title="Marcar como no leída" aria-label="Marcar como no leída"><Mail className="h-4 w-4" /></button>
         <button onClick={onPanel} className={`hidden rounded-md p-2 hover:bg-veil/[0.06] xl:inline-flex ${panelAbierto ? 'text-accent-text' : 'text-ink-muted hover:text-ink-primary'}`} title={panelAbierto ? 'Ocultar la información del contacto' : 'Mostrar la información del contacto'} aria-label="Información del contacto" aria-pressed={panelAbierto}><PanelRight className="h-4 w-4" /></button>
@@ -228,6 +270,26 @@ export function VistaChat({ conv, onVolver, panelAbierto, onPanel }: { conv: Con
         )}
       </div>
 
+      {borrador && v.abierta && (
+        <BorradorAgenteCard
+          borrador={borrador}
+          generando={generando}
+          enviando={enviandoBorrador}
+          onEnviar={() => void enviarBorrador()}
+          onEditar={editarBorrador}
+          onOtra={() => void pedirBorrador()}
+          onDescartar={() => void descartarBorrador(borrador)}
+        />
+      )}
+      {puedeSugerir && (
+        <div className="flex items-center justify-between gap-3 border-t border-line bg-surface-base/40 px-3 py-1.5 sm:px-4">
+          <span className="text-[12px] text-ink-muted">{conv.agente_pausado ? 'El agente está en pausa en este chat.' : 'El agente no ha dejado borrador para este mensaje.'}</span>
+          <button onClick={() => void pedirBorrador()} disabled={generando} className="inline-flex items-center gap-1.5 rounded-md border border-line px-2.5 py-1 text-[12px] font-medium text-ink-secondary hover:bg-veil/[0.06] hover:text-ink-primary disabled:opacity-60">
+            {generando ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />} Sugerir respuesta
+          </button>
+        </div>
+      )}
+
       <Compositor
         key={conv.id}
         convId={conv.id}
@@ -235,7 +297,13 @@ export function VistaChat({ conv, onVolver, panelAbierto, onPanel }: { conv: Con
         restante={v.abierta ? textoRestante(v.restanteMs) : null}
         citando={citando}
         onQuitarCita={() => setCitando(null)}
-        onEnviar={(texto, respondeA) => enviarTexto(conv.id, texto, respondeA, forzado && !v.abierta)}
+        sugerencia={sugerencia}
+        onEnviar={async (texto, respondeA, borradorId) => {
+          const r = await enviarTexto(conv.id, texto, respondeA, forzarEnvio, borradorId);
+          // La base ya lo marcó (enviado, editado o descartado); aquí se quita al instante sin esperar al aviso en vivo.
+          if (!r.rechazado) useAgenteStore.getState().quitarBorrador(conv.id);
+          return r;
+        }}
         forzado={forzado}
         onForzar={setForzado}
         onArchivo={(f) => void alArchivo(f)}

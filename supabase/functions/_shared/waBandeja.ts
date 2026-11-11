@@ -193,6 +193,8 @@ export interface ResultadoEventos {
   estados: number;
   ignorados: number;
   archivos: ArchivoPorGuardar[];
+  /** Mensajes NUEVOS del cliente (no reacciones): el agente de respuestas decide si contesta (migración 0017). */
+  entrantes: { conversacionId: string; mensajeId: string }[];
 }
 
 /** Las funciones SQL rechazan con RAISE EXCEPTION (P0001) lo que no procede: eso se anota y se sigue. */
@@ -204,7 +206,7 @@ const esReglaDeNegocio = (e: { code?: string }) => e.code === 'P0001';
  */
 export async function aplicarEventos(db: BandejaDb, payload: unknown, phoneId: string | null): Promise<ResultadoEventos> {
   const n = normalizarEventos(payload, phoneId);
-  const out: ResultadoEventos = { mensajes: 0, duplicados: 0, estados: 0, ignorados: n.ignorados, archivos: [] };
+  const out: ResultadoEventos = { mensajes: 0, duplicados: 0, estados: 0, ignorados: n.ignorados, archivos: [], entrantes: [] };
   let primerError: Error | null = null;
   const anotar = (e: { message: string }) => { primerError ??= new Error(e.message); };
 
@@ -217,6 +219,9 @@ export async function aplicarEventos(db: BandejaDb, payload: unknown, phoneId: s
     const d = r.data as Json;
     if (d?.duplicado) { out.duplicados++; continue; }
     out.mensajes++;
+    if (m.params.direccion === 'entrante' && m.params.tipo !== 'reaction' && d?.mensaje_id && d?.conversacion_id) {
+      out.entrantes.push({ conversacionId: d.conversacion_id, mensajeId: d.mensaje_id });
+    }
     if (m.archivo && d?.mensaje_id && d?.conversacion_id) {
       out.archivos.push({ mensajeId: d.mensaje_id, conversacionId: d.conversacion_id, mediaId: m.archivo.id, mime: m.archivo.mime });
     }

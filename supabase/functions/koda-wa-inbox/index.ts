@@ -11,11 +11,14 @@
 //   { action: 'saludos', items: [{ wa_id, wamid, nombre?, plantilla?, ts? }] } → registra los saludos enviados.
 //
 // Secrets: CONNEXO_BRIDGE_SECRET (el mismo que ya usa koda-connexo). Opcional: CONNEXO_WA_PHONE_ID (si está, manda sobre
-// el `phone_id` que diga Connexo: segunda barrera contra eventos de otro número).
+// el `phone_id` que diga Connexo: segunda barrera contra eventos de otro número). ANTHROPIC_API_KEY para el agente de
+// respuestas (migración 0017): sin ella el agente simplemente no redacta.
 import { corsHeaders, json } from '../_shared/cors.ts';
 import { getAdminClient } from '../_shared/supabaseAdmin.ts';
 import { aplicarEventos, guardarArchivo, registrarSaludos, type BandejaDb, type SaludoEnviado } from '../_shared/waBandeja.ts';
 import { llamarWa } from '../_shared/connexoWa.ts';
+import { procesarEntrantes } from '../_shared/waAgente.ts';
+import { crearDepsAgente } from '../_shared/agenteDeps.ts';
 
 function safeEqual(a: string, b: string): boolean {
   const ea = new TextEncoder().encode(a);
@@ -48,6 +51,19 @@ Deno.serve(async (req) => {
       if (r.archivos.length) {
         const tarea = Promise.all(r.archivos.map((a) => guardarArchivo(db, llamarWa, a)));
         if (typeof EdgeRuntime !== 'undefined' && EdgeRuntime) EdgeRuntime.waitUntil(tarea); else await tarea;
+      }
+      // Agente de respuestas (migración 0017): en segundo plano, para no hacer esperar a Meta. Nunca tumba el webhook:
+      // si falla (p. ej. falta la clave de Anthropic) solo se anota, y el propietario sigue viendo el mensaje en la Bandeja.
+      if (r.entrantes.length) {
+        const agente = (async () => {
+          try {
+            const res = await procesarEntrantes(crearDepsAgente(), r.entrantes);
+            console.error('[agente]', JSON.stringify(res.map((x) => ({ estado: x.estado, motivo: x.motivo ?? null }))));
+          } catch (e) {
+            console.error('[agente] no se pudo procesar:', e instanceof Error ? e.message : String(e));
+          }
+        })();
+        if (typeof EdgeRuntime !== 'undefined' && EdgeRuntime) EdgeRuntime.waitUntil(agente);
       }
       return json({ ok: true, mensajes: r.mensajes, duplicados: r.duplicados, estados: r.estados, ignorados: r.ignorados });
     }

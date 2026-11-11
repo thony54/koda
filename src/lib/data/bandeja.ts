@@ -49,6 +49,8 @@ export interface Conversacion {
   ultimo_entrante_at: string | null;
   no_leidos: number;
   archivada: boolean;
+  /** El agente de respuestas no interviene en este chat (migración 0017). */
+  agente_pausado?: boolean;
   created_at: string;
   updated_at: string;
   /** Datos del envío de Connexo (se trae por separado; undefined = aún no cargado). */
@@ -155,6 +157,8 @@ export async function responderMensaje(p: {
   reintentarId?: string | null;
   respondeA?: string | null;
   forzar?: boolean;
+  /** Borrador del agente que se usó (tal cual o editado): KODA aprende de la diferencia. */
+  borradorId?: string | null;
   /** Para fotos, audios, video y documentos: el archivo ya está subido (`media.path`) y `texto` es el pie. */
   tipo?: 'image' | 'audio' | 'video' | 'document';
   media?: MediaEnvio | null;
@@ -162,6 +166,7 @@ export async function responderMensaje(p: {
   return invokeConnexo<RespuestaEnvio>({
     action: 'wa_responder',
     conversacion_id: p.conversacionId,
+    borrador_id: p.borradorId ?? undefined,
     texto: p.texto,
     tipo: p.tipo,
     media: p.media ?? undefined,

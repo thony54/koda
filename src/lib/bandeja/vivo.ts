@@ -9,7 +9,10 @@ import type { RealtimeChannel, RealtimePostgresChangesPayload } from '@supabase/
 import { supabase } from '@/lib/supabase';
 import type { Conversacion, Mensaje } from '@/lib/data/bandeja';
 import { completarEnvios, refrescarTodo } from '@/lib/bandeja/acciones';
+import { cargarAgente, refrescarResumen } from '@/lib/bandeja/agenteAcciones';
 import { tituloConversacion } from '@/lib/bandeja/orden';
+import type { BorradorAgente, ConfigAgente } from '@/lib/data/agente';
+import { useAgenteStore } from '@/store/agenteStore';
 import { useBandejaStore } from '@/store/bandejaStore';
 
 const st = () => useBandejaStore.getState();
@@ -73,6 +76,18 @@ function alCambiarMensaje(p: RealtimePostgresChangesPayload<Record<string, unkno
   if (p.eventType === 'INSERT') avisarNuevo(m);
 }
 
+// Agente de respuestas (migración 0017): los borradores y el cambio de modo llegan igual que los mensajes.
+function alCambiarBorrador(p: RealtimePostgresChangesPayload<Record<string, unknown>>) {
+  if (p.eventType === 'DELETE') return;
+  const b = p.new as unknown as BorradorAgente;
+  useAgenteStore.getState().fusionarBorrador(b);
+  if (p.eventType === 'UPDATE' && b.estado !== 'pendiente') void refrescarResumen();     // lo que ya aprendió cambia el acierto
+}
+function alCambiarConfigAgente(p: RealtimePostgresChangesPayload<Record<string, unknown>>) {
+  if (p.eventType === 'DELETE') return;
+  useAgenteStore.getState().setConfig(p.new as unknown as ConfigAgente);
+}
+
 /** Arranca la bandeja en vivo. Devuelve la función que la detiene (al cerrar sesión o salir de la app). */
 export function iniciarBandejaEnVivo(): () => void {
   let canal: RealtimeChannel | null = null;
@@ -87,6 +102,8 @@ export function iniciarBandejaEnVivo(): () => void {
       .channel(`wa-bandeja-${Date.now()}-${++contador}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'wa_conversaciones' }, alCambiarConversacion)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'wa_mensajes' }, alCambiarMensaje)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'wa_agente_borradores' }, alCambiarBorrador)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'wa_agente_config' }, alCambiarConfigAgente)
       .subscribe((estado) => {
         if (detenido || canal !== c) return;
         if (estado === 'SUBSCRIBED') {
@@ -94,6 +111,7 @@ export function iniciarBandejaEnVivo(): () => void {
           st().setConexion('en_vivo');
           // Todo lo que pasó antes de estar suscritos (o durante una caída) se recupera aquí.
           void refrescarTodo();
+          void cargarAgente();
         } else if (estado === 'CHANNEL_ERROR' || estado === 'TIMED_OUT' || estado === 'CLOSED') {
           st().setConexion(estado === 'CLOSED' ? 'sin_conexion' : 'reconectando');
           window.clearTimeout(vigilante);
@@ -134,5 +152,6 @@ export function iniciarBandejaEnVivo(): () => void {
     if (canal) void supabase.removeChannel(canal);
     canal = null;
     st().reset();
+    useAgenteStore.getState().reset();
   };
 }

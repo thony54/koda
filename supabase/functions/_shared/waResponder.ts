@@ -37,7 +37,8 @@ export interface RespuestaPedida {
   /** Por defecto 'text'. Para fotos, audios, video y documentos: el archivo ya está en el bucket (`media.path`) y `texto` es el pie. */
   tipo?: TipoEnvio;
   media?: MediaPedida | null;
-  usuario: string;
+  /** Quién envía (el propietario). NULL cuando responde el agente en modo automático. */
+  usuario: string | null;
 }
 export interface RespuestaResultado {
   ok: boolean;

@@ -125,6 +125,9 @@ function BurbujaBase({ m, primero, reacciones, citado, ahora, onResponder, onRei
           )}
           <Contenido m={m} />
           <div className={`mt-1 flex items-center justify-end gap-1 text-[10.5px] ${solo ? 'rounded-full bg-black/40 px-2 py-0.5 text-white' : 'text-ink-muted'}`}>
+            {saliente && (m.extra as { agente?: boolean } | null)?.agente === true && (
+              <span className="rounded border border-line px-1 py-px text-[9.5px] font-medium uppercase tracking-wide text-ink-muted" title="Lo envió el agente en modo automático">Agente</span>
+            )}
             <span className="tabular-nums">{horaCorta(m.ts)}</span>
             {saliente && <Ticks estado={m.estado} sinConfirmar={sinConfirmar} />}
           </div>

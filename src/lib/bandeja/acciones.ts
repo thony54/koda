@@ -120,14 +120,14 @@ async function procesarEnvio(
   convId: string,
   clave: {
     id: string; texto: string; clientId: string; reintentarId?: string | null; respondeA?: string | null; forzar?: boolean;
-    tipo?: 'image' | 'audio' | 'video' | 'document'; media?: MediaEnvio | null;
+    tipo?: 'image' | 'audio' | 'video' | 'document'; media?: MediaEnvio | null; borradorId?: string | null;
   },
 ): Promise<ResultadoEnvio> {
   let r: RespuestaEnvio;
   try {
     r = await responderMensaje({
       conversacionId: convId, texto: clave.texto, clientId: clave.clientId, reintentarId: clave.reintentarId, respondeA: clave.respondeA, forzar: clave.forzar,
-      tipo: clave.tipo, media: clave.media,
+      tipo: clave.tipo, media: clave.media, borradorId: clave.borradorId,
     });
   } catch (e) {
     const msg = `No se pudo contactar con KODA (${mensajeDe(e, 'sin conexión')}). Reintenta: no se enviará dos veces.`;
@@ -153,7 +153,9 @@ async function procesarEnvio(
 }
 
 /** Responde con texto libre. El mensaje aparece al instante («enviando») y se confirma solo (✓ → ✓✓ → leído). */
-export async function enviarTexto(convId: string, texto: string, respondeA?: string | null, forzar = false): Promise<ResultadoEnvio> {
+export async function enviarTexto(
+  convId: string, texto: string, respondeA?: string | null, forzar = false, borradorId?: string | null,
+): Promise<ResultadoEnvio> {
   const limpio = texto.trim();
   if (!limpio) return { ok: false, error: 'Escribe un mensaje.', rechazado: true };
   const clientId = crypto.randomUUID();
@@ -164,7 +166,7 @@ export async function enviarTexto(convId: string, texto: string, respondeA?: str
     estado: 'enviando', error: null, ts, created_at: ts, actualizado_at: ts, pendiente: true,
   };
   st().fusionarMsg(local);
-  return procesarEnvio(convId, { id: local.id, texto: limpio, clientId, respondeA, forzar });
+  return procesarEnvio(convId, { id: local.id, texto: limpio, clientId, respondeA, forzar, borradorId });
 }
 
 // ── Archivos (fotos, audios, video, documentos) ──────────────────────────────

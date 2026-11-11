@@ -5,6 +5,7 @@ import { PageHeader } from '@/components/layout/PageHeader';
 import { ListaChats } from '@/components/bandeja/ListaChats';
 import { VistaChat } from '@/components/bandeja/VistaChat';
 import { PanelContacto } from '@/components/bandeja/PanelContacto';
+import { ControlAgente } from '@/components/bandeja/ControlAgente';
 import { useBandejaStore, type EstadoConexion } from '@/store/bandejaStore';
 import { importarSaludos } from '@/lib/data/bandeja';
 import { cargarLista } from '@/lib/bandeja/acciones';
@@ -74,6 +75,7 @@ export default function Bandeja() {
   const c = CONEXION[conexion];
   const acciones = (
     <>
+      <ControlAgente />
       <span className={`inline-flex h-8 items-center gap-2 rounded-md border border-line px-3 text-xs font-medium ${c.color}`} role="status" title="Estado de la conexión en tiempo real">
         <span className={`h-2 w-2 rounded-full ${c.punto}`} /> {c.texto}
       </span>

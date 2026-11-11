@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Inbox, Loader2, MessageCircle, RefreshCw, Search } from 'lucide-react';
+import { Inbox, Loader2, MessageCircle, RefreshCw, Search, Sparkles } from 'lucide-react';
 import { useBandejaStore } from '@/store/bandejaStore';
+import { useAgenteStore } from '@/store/agenteStore';
 import { cargarLista } from '@/lib/bandeja/acciones';
 import { fechaLista } from '@/lib/bandeja/formato';
 import { filtrarConversaciones, tituloConversacion, type FiltroLista } from '@/lib/bandeja/orden';
@@ -26,6 +27,7 @@ export function ListaChats({ seleccionada, onSeleccionar }: { seleccionada: stri
   const listaCargada = useBandejaStore((s) => s.listaCargada);
   const cargando = useBandejaStore((s) => s.cargandoLista);
   const errorLista = useBandejaStore((s) => s.errorLista);
+  const borradores = useAgenteStore((s) => s.borradores);
   const [filtro, setFiltro] = useState<FiltroLista>('respuestas');
   const [busqueda, setBusqueda] = useState('');
 
@@ -120,6 +122,11 @@ export function ListaChats({ seleccionada, onSeleccionar }: { seleccionada: stri
                   )}
                 </div>
                 {c.envio?.estado === 'aceptado' && <p className="mt-1 text-[11px] font-medium text-success">Aceptó la demo</p>}
+                {borradores[c.id] && (
+                  <p className={`mt-1 inline-flex items-center gap-1 text-[11px] font-medium ${borradores[c.id].accion === 'traspasar' ? 'text-warning' : 'text-accent-text'}`}>
+                    <Sparkles className="h-3 w-3" /> {borradores[c.id].accion === 'traspasar' ? 'El agente te lo deja a ti' : 'Borrador del agente listo'}
+                  </p>
+                )}
               </div>
             </Link>
           );

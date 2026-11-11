@@ -17,7 +17,10 @@ interface Props {
   restante: string | null;
   citando: Mensaje | null;
   onQuitarCita: () => void;
-  onEnviar: (texto: string, respondeA: string | null) => Promise<ResultadoEnvio>;
+  /** `borradorId`: el borrador del agente del que salió este texto (tal cual o editado), para que KODA aprenda de la diferencia. */
+  onEnviar: (texto: string, respondeA: string | null, borradorId: string | null) => Promise<ResultadoEnvio>;
+  /** «Editar» un borrador del agente: su texto pasa a la caja (cada pedido trae una `clave` nueva). */
+  sugerencia?: { clave: number; id: string; texto: string } | null;
   /** «Intentar responder igual» está activado: se escribe aunque la bandeja crea la ventana cerrada (Meta decide). */
   forzado: boolean;
   onForzar: (valor: boolean) => void;
@@ -29,7 +32,7 @@ interface Props {
 
 const mmss = (seg: number) => `${Math.floor(seg / 60)}:${String(seg % 60).padStart(2, '0')}`;
 
-export function Compositor({ convId, bloqueo, restante, citando, onQuitarCita, onEnviar, forzado, onForzar, onArchivo, onNotaDeVoz }: Props) {
+export function Compositor({ convId, bloqueo, restante, citando, onQuitarCita, onEnviar, sugerencia, forzado, onForzar, onArchivo, onNotaDeVoz }: Props) {
   const [texto, setTexto] = useState(() => BORRADORES.get(convId) ?? '');
   const [error, setError] = useState<string | null>(null);
   const [grab, setGrab] = useState<{ g: Grabacion; seg: number } | null>(null);
@@ -37,6 +40,20 @@ export function Compositor({ convId, bloqueo, restante, citando, onQuitarCita, o
   const caja = useRef<HTMLTextAreaElement>(null);
   const archivo = useRef<HTMLInputElement>(null);
   const grabRef = useRef<Grabacion | null>(null);
+  /** Borrador del agente que está en la caja (se manda al enviar para que KODA aprenda). */
+  const borradorUsado = useRef<string | null>(null);
+  const claveSugerencia = useRef<number | null>(null);
+
+  // «Editar» un borrador del agente: su texto pasa a la caja y el cursor al final.
+  useEffect(() => {
+    if (!sugerencia || claveSugerencia.current === sugerencia.clave) return;
+    claveSugerencia.current = sugerencia.clave;
+    borradorUsado.current = sugerencia.id;
+    setTexto(sugerencia.texto);
+    BORRADORES.set(convId, sugerencia.texto);
+    setError(null);
+    window.setTimeout(() => { const el = caja.current; if (el) { el.focus(); el.setSelectionRange(el.value.length, el.value.length); } }, 0);
+  }, [sugerencia, convId]);
 
   // Crece con el texto, hasta 6 líneas.
   useLayoutEffect(() => {
@@ -75,11 +92,14 @@ export function Compositor({ convId, bloqueo, restante, citando, onQuitarCita, o
     if (!limpio || (bloqueo && !forzado)) return;
     if (limpio.length > MAX) { setError(`El mensaje supera los ${MAX} caracteres de WhatsApp.`); return; }
     const respondeA = citando?.wamid ?? null;
+    const borradorId = borradorUsado.current;
+    borradorUsado.current = null;
     cambiar('');
     onQuitarCita();
-    const r = await onEnviar(limpio, respondeA);
+    const r = await onEnviar(limpio, respondeA, borradorId);
     // Si el servidor lo rechazó (ventana cerrada, baja…) el texto vuelve a la caja para no perderlo.
     if (r.rechazado) {
+      borradorUsado.current = borradorId;
       setError(r.error ?? 'No se pudo enviar.');
       setTexto((actual) => {
         const nuevo = actual.trim() ? `${limpio}\n${actual}` : limpio;

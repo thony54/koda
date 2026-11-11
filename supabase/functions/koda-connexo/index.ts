@@ -21,6 +21,10 @@
 //                                                  → BANDEJA: responde con texto libre dentro de la ventana de 24 h (migración 0016)
 //   { action: 'wa_media', mensaje_id }            → BANDEJA: baja y guarda el archivo de un mensaje que aún no se guardó
 //   { action: 'wa_importar_saludos' }             → BANDEJA: trae los saludos que Connexo ya había enviado, para que los chats los muestren
+//   { action: 'agente_estado' }                   → AGENTE (0017): ¿está la clave de Anthropic? y la configuración
+//   { action: 'agente_generar', conversacion_id } → AGENTE: «otra versión» del borrador de ese chat
+//   { action: 'agente_probar', mensaje, theme?, nombre?, historial? } → AGENTE: redacta una respuesta de prueba (no guarda ni envía nada)
+//   (wa_responder acepta además `borrador_id`: el agente aprende de lo que envías, lo uses tal cual, lo edites o escribas otra cosa)
 //
 // Opcional: CONNEXO_PUBLIC_URL (por defecto https://www.connexoapp.com) para armar el enlace a la vista previa.
 //
@@ -37,6 +41,9 @@ import {
 import { guardarArchivo, registrarRespuestasPasadas, registrarSaludos, type BandejaDb } from '../_shared/waBandeja.ts';
 import { responderDesdeBandeja } from '../_shared/waResponder.ts';
 import { llamarWa } from '../_shared/connexoWa.ts';
+import { crearDepsAgente } from '../_shared/agenteDeps.ts';
+import { claveAnthropicConfigurada, SinClaveAnthropic } from '../_shared/agenteModelo.ts';
+import { decidirSinModelo, generarRespuesta, procesarConversacion, type ContextoAgente, type EjemploCtx } from '../_shared/waAgente.ts';
 
 const VERSION_CONTRATO = 1;
 const MAX_POR_LLAMADA = 50;
@@ -637,7 +644,84 @@ Deno.serve(async (req) => {
         forzar: body.forzar === true,
         usuario: caller.id,
       });
-      return json(r);
+      // El agente aprende de lo que el propietario envía (aprobado, editado o escrito por su cuenta). Nunca estorba al envío.
+      let aprendizaje: string | null = null;
+      if (tipo === 'text' && r.id && !reintentar && !r.en_curso) {
+        try {
+          const borrador = typeof body.borrador_id === 'string' && UUID_RE.test(body.borrador_id) ? body.borrador_id : null;
+          const ap = await admin.rpc('wa_agente_aprender', {
+            p_conv: conv, p_texto: typeof body.texto === 'string' ? body.texto : '', p_borrador: borrador, p_msg: r.id, p_user: caller.id,
+          });
+          if (ap.error) console.error('[agente] no se pudo aprender:', ap.error.message);
+          else aprendizaje = (ap.data as { origen?: string } | null)?.origen ?? null;
+        } catch (e) {
+          console.error('[agente] no se pudo aprender:', e instanceof Error ? e.message : String(e));
+        }
+      }
+      return json({ ...r, aprendizaje });
+    }
+
+    // ── AGENTE de la Bandeja (migración 0017) ─────────────────────────────
+    if (body?.action === 'agente_estado') {
+      const { data, error } = await admin.from('wa_agente_config').select('modo, modelo, esfuerzo, espera_seg').eq('id', 1).maybeSingle();
+      if (error) return json({ error: error.message }, 500);
+      return json({ ok: true, clave: claveAnthropicConfigurada(), config: data });
+    }
+
+    if (body?.action === 'agente_generar') {
+      const conv = body.conversacion_id;
+      if (typeof conv !== 'string' || !UUID_RE.test(conv)) return json({ error: 'conversacion_id inválido.' }, 400);
+      try {
+        const r = await procesarConversacion(crearDepsAgente(), { convId: conv, manual: true });
+        return json({ ok: true, ...r });
+      } catch (e) {
+        if (e instanceof SinClaveAnthropic) return json({ error: e.message, sin_clave: true }, 503);
+        throw e;
+      }
+    }
+
+    if (body?.action === 'agente_probar') {
+      const mensaje = typeof body.mensaje === 'string' ? body.mensaje.trim().slice(0, 600) : '';
+      if (!mensaje) return json({ error: 'Escribe lo que diría el cliente.' }, 400);
+      const theme = typeof body.theme === 'string' && /^[a-z]{3,10}$/.test(body.theme) ? body.theme : 'default';
+      const nombre = typeof body.nombre === 'string' && body.nombre.trim() ? body.nombre.trim().slice(0, 80) : 'Negocio de prueba';
+      const historial = (Array.isArray(body.historial) ? body.historial : []).slice(-8)
+        .filter((h: { d?: string; t?: string }) => (h?.d === 'cliente' || h?.d === 'nosotros') && typeof h?.t === 'string' && h.t.trim())
+        .map((h: { d: 'cliente' | 'nosotros'; t: string }) => ({ d: h.d, t: h.t.trim().slice(0, 600) }));
+      const [{ data: cfg }, { data: ej }] = await Promise.all([
+        admin.from('wa_agente_config').select('modelo, esfuerzo').eq('id', 1).maybeSingle(),
+        admin.from('wa_agente_aprendizaje').select('origen, contexto, texto_agente, texto_humano, intencion, nicho, created_at')
+          .eq('activo', true).order('created_at', { ascending: false }).limit(60),
+      ]);
+      const ahora = new Date().toISOString();
+      const mensajes = [
+        { id: 'p-0', seq: 0, direccion: 'saliente' as const, tipo: 'template', texto: null, ts: ahora, humano: false, agente: false },
+        ...historial.map((h: { d: 'cliente' | 'nosotros'; t: string }, i: number) => ({
+          id: `p-${i + 1}`, seq: i + 1, direccion: h.d === 'cliente' ? 'entrante' as const : 'saliente' as const, tipo: 'text', texto: h.t, ts: ahora, humano: h.d === 'nosotros', agente: false,
+        })),
+        { id: 'p-ultimo', seq: 99, direccion: 'entrante' as const, tipo: 'text', texto: mensaje, ts: ahora, humano: false, agente: false },
+      ];
+      const ctx: ContextoAgente = {
+        conversacion: { id: 'prueba', wa_id: '0', nombre_perfil: null, negocio: nombre, ultimo_entrante_at: ahora, pausado: false, envio_id: null, prospect_id: null },
+        envio: { estado: typeof body.estado === 'string' && /^[a-z_]{3,20}$/.test(body.estado) ? body.estado : 'wa_enviado', rubro: null, theme, username: null, categoria: null, ciudad: null, nombre },
+        prospecto: null,
+        config: { modo: 'supervisado', modelo: cfg?.modelo ?? 'claude-opus-5-5', esfuerzo: cfg?.esfuerzo ?? 'medium', espera_seg: 0 },
+        mensajes,
+        ultimo_entrante: { id: 'p-ultimo', tipo: 'text', texto: mensaje, ts: ahora },
+        borrador_pendiente: null,
+        ejemplos: (ej ?? []) as EjemploCtx[],
+        respuestas_automaticas_24h: 0,
+      };
+      const previa = decidirSinModelo(ctx);
+      if (previa?.accion === 'omitir') return json({ ok: true, accion: 'omitir', texto: '', nota: previa.motivo, intencion: 'otro', confianza: 'alta' });
+      if (previa) return json({ ok: true, accion: 'traspasar', texto: '', nota: previa.nota, intencion: previa.intencion, confianza: 'alta' });
+      try {
+        const g = await generarRespuesta(ctx, crearDepsAgente().llamarModelo());
+        return json({ ok: true, accion: g.accion, texto: g.texto, nota: g.nota, intencion: g.intencion, confianza: g.confianza, uso: g.uso, modelo: g.modelo });
+      } catch (e) {
+        if (e instanceof SinClaveAnthropic) return json({ error: e.message, sin_clave: true }, 503);
+        throw e;
+      }
     }
 
     // ── BANDEJA: bajar y guardar el archivo de un mensaje (reintento manual) ──

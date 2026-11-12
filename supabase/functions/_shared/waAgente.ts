@@ -9,10 +9,17 @@
 import type { BandejaDb, Json, LlamarWa } from './waBandeja.ts';
 import { responderDesdeBandeja } from './waResponder.ts';
 import { CONOCIMIENTO_CONNEXO, PRECIOS_PERMITIDOS } from './conocimientoConnexo.ts';
+import { responderConRecuerdo, type EntradaBanco, type ResultadoRecuerdo } from './waRecuerdo.ts';
+import { SEMILLAS } from './bancoSemilla.ts';
 
 // ── Tipos ───────────────────────────────────────────────────────────────────
 
 export type Modo = 'apagado' | 'supervisado' | 'automatico';
+/**
+ * Quién redacta: «recuerdo» = el banco de respuestas (gratis, sin IA); «claude» = el modelo de Anthropic (pide clave y cuesta);
+ * «mixto» = primero el banco y, solo si no reconoce la pregunta, Claude (si hay clave).
+ */
+export type Motor = 'recuerdo' | 'claude' | 'mixto';
 export type Accion = 'responder' | 'traspasar' | 'omitir';
 export type Confianza = 'alta' | 'media' | 'baja';
 
@@ -44,7 +51,7 @@ export interface ContextoAgente {
   };
   envio: { estado: string; rubro: string | null; theme: string | null; username: string | null; categoria: string | null; ciudad: string | null; nombre: string | null } | null;
   prospecto: { nombre: string | null; rating: number | string | null; reviews: number | null; opt_out: boolean; tiene_web: boolean; tiene_instagram: boolean } | null;
-  config: { modo: Modo; modelo: string; esfuerzo: string; espera_seg: number };
+  config: { modo: Modo; modelo: string; esfuerzo: string; espera_seg: number; /** Sin la migración 0018 no viene: se asume «claude», como antes. */ motor?: Motor };
   mensajes: MensajeCtx[];
   ultimo_entrante: { id: string; tipo: string; texto: string | null; ts: string } | null;
   borrador_pendiente: { id: string; accion: Accion; texto: string | null; intencion: string | null; nota: string | null; mensaje_id: string | null } | null;
@@ -329,8 +336,11 @@ export function construirUsuario(ctx: ContextoAgente, elegidos: EjemplosElegidos
   if (p?.rating != null) filas.push(`Calificación en Google: ${p.rating}${p.reviews ? ` (${p.reviews} reseñas)` : ''}`);
   if (p) filas.push(`Ya tiene página web: ${p.tiene_web ? 'sí' : 'no'}. Tiene Instagram: ${p.tiene_instagram ? 'sí' : 'no'}.`);
   if (e?.estado) filas.push(`Estado con Connexo: ${ESTADOS[e.estado] ?? e.estado}`);
-  if (e?.username && ['aprobado', 'wa_enviado', 'aceptado', 'declinado'].includes(e.estado)) {
-    filas.push(`Perfil de demostración: https://www.connexoapp.com/${e.username}`);
+  // Antes de aceptar la demo su perfil está inactivo (quien lo abre ve una cuenta inactiva): el enlace solo se da cuando ya aceptó.
+  if (e?.username && e.estado === 'aceptado') {
+    filas.push(`Perfil de demostración (ya activo): https://www.connexoapp.com/${e.username}`);
+  } else if (e?.username) {
+    filas.push(`Su dirección quedaría connexoapp.com/${e.username} (todavía inactiva: no le des el enlace completo hasta que acepte la demo)`);
   }
   out.push(`<negocio>\n${filas.join('\n')}\n</negocio>`);
 
@@ -398,7 +408,15 @@ export function motivoDeSalto(ctx: ContextoAgente, ahora: number, manual: boolea
 
 // ── Generar la respuesta ────────────────────────────────────────────────────
 
-export interface Generada extends RespuestaModelo { uso?: Uso; modelo?: string }
+export interface Generada extends RespuestaModelo {
+  uso?: Uso; modelo?: string;
+  /** Quién la redactó de verdad. */
+  motor?: 'recuerdo' | 'claude';
+  /** Entrada del banco que respondió (para contar sus aciertos). */
+  banco_id?: string | null;
+  /** Del banco: cumple lo necesario para ir sola en modo automático. */
+  autoOk?: boolean;
+}
 
 /** Prompt → modelo → respuesta validada y revisada. Nunca lanza por culpa del modelo: ante cualquier problema, «traspasar». */
 export async function generarRespuesta(ctx: ContextoAgente, llamar: LlamarModelo): Promise<Generada> {
@@ -417,6 +435,62 @@ export async function generarRespuesta(ctx: ContextoAgente, llamar: LlamarModelo
   const rev = revisarRespuesta(v.texto);
   if (!rev.ok) return traspaso(`Se redactó una respuesta pero no pasó la revisión (${rev.motivo}). Respóndelo tú.`);
   return { ...v, texto: rev.texto, ...base };
+}
+
+// ── El banco de respuestas (motor «recuerdo») ───────────────────────────────
+
+const NOMBRE_SIN_CLAVE = 'SinClaveAnthropic';
+const sinClave = (e: unknown): boolean => e instanceof Error && e.name === NOMBRE_SIN_CLAVE;
+
+/** Las entradas activas del banco. Si no hay ninguna (primera vez), se siembran las de fábrica y se vuelven a pedir. */
+export async function cargarBanco(db: BandejaDb): Promise<EntradaBanco[]> {
+  const pedir = async (): Promise<EntradaBanco[]> => {
+    const r = await db.rpc('wa_agente_banco_activo', {});
+    if (r.error) throw new Error(`wa_agente_banco_activo: ${r.error.message}`);
+    return Array.isArray(r.data) ? (r.data as EntradaBanco[]) : [];
+  };
+  let banco = await pedir();
+  if (!banco.length) {
+    const s = await db.rpc('wa_agente_banco_sembrar', { p: SEMILLAS });
+    if (s.error) throw new Error(`wa_agente_banco_sembrar: ${s.error.message}`);
+    banco = await pedir();
+  }
+  return banco;
+}
+
+/** Lo que devolvió el banco, pasado por las mismas reglas duras que lo del modelo: si algo no cuadra, «traspasar». */
+function deRecuerdo(r: ResultadoRecuerdo): Generada {
+  const base = { motor: 'recuerdo' as const, modelo: 'recuerdo', banco_id: r.banco_id, autoOk: false,
+    uso: { motor: 'recuerdo', puntaje: Math.round(r.puntaje * 100) / 100, entradas: r.entradas.join(','), variante: r.variante ?? null } as Uso };
+  if (r.accion !== 'responder') return { accion: r.accion, texto: '', intencion: r.intencion, confianza: r.confianza, nota: r.nota, ...base };
+  const rev = revisarRespuesta(r.texto);
+  if (!rev.ok) {
+    return { accion: 'traspasar', texto: '', intencion: r.intencion, confianza: 'baja', ...base,
+      nota: `Tenía una respuesta («${r.nota.replace(/\s*Revísalo.*$/, '')}») pero no pasó la revisión (${rev.motivo}). Respóndelo tú.` };
+  }
+  return { accion: 'responder', texto: rev.texto, intencion: r.intencion, confianza: r.confianza, nota: r.nota, ...base, autoOk: r.autoOk };
+}
+
+/** Redacta con el motor elegido en la configuración. Nunca lanza por culpa del banco; con «claude» falla claro si no hay clave. */
+export async function generarConMotor(
+  ctx: ContextoAgente, deps: Pick<DepsAgente, 'db' | 'llamarModelo' | 'aleatorio' | 'log'>,
+): Promise<Generada> {
+  const motor: Motor = ctx.config.motor ?? 'claude';
+  if (motor === 'claude') return { ...(await generarRespuesta(ctx, deps.llamarModelo())), motor: 'claude' };
+
+  const banco = await cargarBanco(deps.db);
+  const r = responderConRecuerdo(ctx, banco, deps.aleatorio);
+  const g = deRecuerdo(r);
+  // «Mixto»: si el banco no reconoce la pregunta, se le pregunta a Claude (si hay clave). Lo delicado y los silencios NO pasan por el modelo.
+  if (motor === 'mixto' && r.sinCoincidencia && r.accion === 'traspasar') {
+    try {
+      return { ...(await generarRespuesta(ctx, deps.llamarModelo())), motor: 'claude' };
+    } catch (e) {
+      if (!sinClave(e)) throw e;
+      return { ...g, nota: `${g.nota} (No hay clave de Anthropic para consultar al modelo.)` };
+    }
+  }
+  return g;
 }
 
 /** Pausa antes de enviar sola (modo automático): una persona tarda en leer y escribir. 6 a 45 s según el largo. */
@@ -467,14 +541,14 @@ export async function procesarConversacion(deps: DepsAgente, pedido: PedidoAgent
   if (previa) {
     r = { accion: 'traspasar', texto: '', intencion: previa.intencion, confianza: 'alta', nota: previa.nota };
   } else {
-    r = await generarRespuesta(ctx, deps.llamarModelo());
+    r = await generarConMotor(ctx, deps);
     if (r.accion === 'omitir') return { estado: 'omitido', motivo: r.nota || 'no conviene responder', uso: r.uso };
   }
 
   const g = await db.rpc('wa_agente_guardar_borrador', {
     p: {
       conversacion_id: pedido.convId, mensaje_id: ctx.ultimo_entrante?.id ?? null, accion: r.accion, texto: r.texto, intencion: r.intencion,
-      confianza: r.confianza, nota: r.nota, modelo: r.modelo ?? null, uso: r.uso ?? null,
+      confianza: r.confianza, nota: r.nota, modelo: r.modelo ?? null, uso: r.uso ?? null, banco_id: r.banco_id ?? null,
     },
   });
   if (g.error) throw new Error(`wa_agente_guardar_borrador: ${g.error.message}`);
@@ -484,7 +558,8 @@ export async function procesarConversacion(deps: DepsAgente, pedido: PedidoAgent
   const salida: ResultadoAgente = { estado: r.accion === 'responder' ? 'borrador' : 'traspaso', borrador_id: id, texto: r.texto, nota: r.nota, intencion: r.intencion, uso: r.uso };
 
   // Modo automático: solo respuestas con confianza, dentro del tope, y nunca sobre un traspaso.
-  if (!manual && ctx.config.modo === 'automatico' && r.accion === 'responder' && r.confianza !== 'baja') {
+  // Con el banco, además, solo van solas las respuestas que el propietario ya verificó o aprobó 3 veces sin cambios (autoOk).
+  if (!manual && ctx.config.modo === 'automatico' && r.accion === 'responder' && (r.motor === 'recuerdo' ? r.autoOk === true : r.confianza !== 'baja')) {
     if (ctx.respuestas_automaticas_24h >= LIMITE_AUTO_24H) {
       await db.rpc('wa_agente_anotar', { p_borrador: id, p_nota: 'Llegó al tope de respuestas automáticas en este chat (24 h): revísalo tú.' });
       return salida;

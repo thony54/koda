@@ -8,6 +8,7 @@ import { ESQUEMA_RESPUESTA, type LlamarModelo } from './waAgente.ts';
 export class SinClaveAnthropic extends Error {
   constructor() {
     super('Falta el secreto ANTHROPIC_API_KEY en Supabase (proyecto de KODA): el agente no puede redactar hasta que lo guardes.');
+    this.name = 'SinClaveAnthropic';   // waAgente.ts (sin Deno) la reconoce por el nombre
   }
 }
 

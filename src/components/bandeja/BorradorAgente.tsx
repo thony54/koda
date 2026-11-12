@@ -4,7 +4,7 @@ import type { BorradorAgente } from '@/lib/data/agente';
 const INTENCION: Record<string, string> = {
   precio: 'Precio', pagina_web: 'Página web', redes: 'Redes sociales', como_funciona: 'Cómo funciona', prueba: 'Prueba gratis', demo: 'La demo',
   objecion: 'Objeción', interes: 'Interés', soporte: 'Soporte', agradecimiento: 'Agradece', rechazo: 'No le interesa', queja: 'Queja',
-  baja: 'Pidió baja', bot: 'Preguntó si es una persona', saludo: 'Saludo',
+  baja: 'Pidió baja', bot: 'Preguntó si es una persona', saludo: 'Saludo', acuse: 'Acuse de recibo', aprendida: 'Aprendida de ti',
 };
 
 interface Props {
@@ -33,6 +33,7 @@ export function BorradorAgenteCard({ borrador: b, generando, enviando, onEnviar,
           <div className="min-w-0 flex-1">
             <p className="text-[12.5px] font-medium text-warning">Te lo dejo a ti{intencion ? ` · ${intencion}` : ''}</p>
             <p className="mt-0.5 break-words text-[13px] text-ink-primary">{b.nota || 'El agente prefiere que respondas tú.'}</p>
+            <p className="mt-0.5 text-[11.5px] text-ink-muted">Cuando lo respondas, el agente lo aprende para la próxima.</p>
             <div className="mt-2 flex flex-wrap gap-2">
               <button onClick={onOtra} disabled={generando} className={boton}>
                 {generando ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />} Pedirle un borrador igual

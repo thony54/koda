@@ -4,7 +4,7 @@
  */
 import {
   descartarBorradorAgente, estadoClaveAgente, generarBorradorAgente, getConfigAgente, listBorradoresPendientes, pausarAgenteEnChat,
-  resumenAgente, setModoAgente, type BorradorAgente, type ModoAgente, type ResultadoGenerar,
+  resumenAgente, setModoAgente, setMotorAgente, type BorradorAgente, type ModoAgente, type MotorAgente, type ResultadoGenerar,
 } from '@/lib/data/agente';
 import { useAgenteStore } from '@/store/agenteStore';
 import { useBandejaStore } from '@/store/bandejaStore';
@@ -34,6 +34,13 @@ export async function cambiarModo(modo: ModoAgente): Promise<{ ok: boolean; erro
   if (antes) st().setConfig({ ...antes, modo });                      // al instante; Realtime lo confirma
   try { await setModoAgente(modo); return { ok: true }; }
   catch (e) { if (antes) st().setConfig(antes); return { ok: false, error: mensajeDe(e, 'No se pudo cambiar el modo.') }; }
+}
+
+export async function cambiarMotor(motor: MotorAgente): Promise<{ ok: boolean; error?: string }> {
+  const antes = st().config;
+  if (antes) st().setConfig({ ...antes, motor });
+  try { await setMotorAgente(motor); return { ok: true }; }
+  catch (e) { if (antes) st().setConfig(antes); return { ok: false, error: mensajeDe(e, 'No se pudo cambiar el motor.') }; }
 }
 
 export async function descartarBorrador(b: BorradorAgente): Promise<void> {

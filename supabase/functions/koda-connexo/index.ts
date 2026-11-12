@@ -21,10 +21,12 @@
 //                                                  → BANDEJA: responde con texto libre dentro de la ventana de 24 h (migración 0016)
 //   { action: 'wa_media', mensaje_id }            → BANDEJA: baja y guarda el archivo de un mensaje que aún no se guardó
 //   { action: 'wa_importar_saludos' }             → BANDEJA: trae los saludos que Connexo ya había enviado, para que los chats los muestren
-//   { action: 'agente_estado' }                   → AGENTE (0017): ¿está la clave de Anthropic? y la configuración
+//   { action: 'agente_estado' }                   → AGENTE (0017/0018): ¿está la clave de Anthropic?, la configuración (modo, motor) y el tamaño del banco
 //   { action: 'agente_generar', conversacion_id } → AGENTE: «otra versión» del borrador de ese chat
-//   { action: 'agente_probar', mensaje, theme?, nombre?, historial? } → AGENTE: redacta una respuesta de prueba (no guarda ni envía nada)
-//   (wa_responder acepta además `borrador_id`: el agente aprende de lo que envías, lo uses tal cual, lo edites o escribas otra cosa)
+//   { action: 'agente_probar', mensaje, theme?, nombre?, estado?, historial?, motor? } → AGENTE: redacta una respuesta de prueba (no guarda ni envía nada)
+//   { action: 'agente_banco_sembrar' }            → AGENTE (0018): sube las respuestas de fábrica al banco (idempotente: no pisa lo editado ni lo aprendido)
+//   (wa_responder acepta además `borrador_id`: el agente aprende de lo que envías, lo uses tal cual, lo edites o escribas otra cosa;
+//    lo que no estaba en el banco vuelve a él como variante, frase o entrada nueva)
 //
 // Opcional: CONNEXO_PUBLIC_URL (por defecto https://www.connexoapp.com) para armar el enlace a la vista previa.
 //
@@ -43,7 +45,12 @@ import { responderDesdeBandeja } from '../_shared/waResponder.ts';
 import { llamarWa } from '../_shared/connexoWa.ts';
 import { crearDepsAgente } from '../_shared/agenteDeps.ts';
 import { claveAnthropicConfigurada, SinClaveAnthropic } from '../_shared/agenteModelo.ts';
-import { decidirSinModelo, generarRespuesta, procesarConversacion, type ContextoAgente, type EjemploCtx } from '../_shared/waAgente.ts';
+import {
+  cargarBanco, decidirSinModelo, esAutorrespuesta, generarConMotor, procesarConversacion, revisarRespuesta,
+  type ContextoAgente, type EjemploCtx, type Motor,
+} from '../_shared/waAgente.ts';
+import { planearAprendizaje } from '../_shared/waRecuerdo.ts';
+import { SEMILLAS } from '../_shared/bancoSemilla.ts';
 
 const VERSION_CONTRATO = 1;
 const MAX_POR_LLAMADA = 50;
@@ -76,6 +83,32 @@ const PASOS_REVISION: Record<string, { puente: 'estado_set' | 'rellenar'; estado
   restaurar: { puente: 'estado_set', estado: 'borrador' },
   rellenar: { puente: 'rellenar' },
 };
+
+/** Lo que devuelve `wa_agente_aprender` (0018): con esto se decide qué guardar en el banco de respuestas. */
+interface DatosAprendizaje {
+  aprendido?: boolean; duplicado?: boolean; origen?: 'aprobado' | 'editado' | 'directo'; banco_id?: string | null;
+  contexto?: { d: 'cliente' | 'nosotros'; t: string }[]; nombre_perfil?: string | null; negocio?: string | null;
+}
+
+/**
+ * Lo que el propietario envió vuelve al banco: como variante de la entrada que ya existía, como frase nueva, o como entrada nueva.
+ * Los controles (`planearAprendizaje`) dejan fuera lo particular de un chat (entregas de claves, teléfonos, precios inventados…).
+ */
+async function aprenderEnBanco(db: BandejaDb, d: DatosAprendizaje, texto: string): Promise<void> {
+  if (!d.origen) return;
+  const banco = await cargarBanco(db);
+  const plan = planearAprendizaje({
+    origen: d.origen, textoHumano: texto, contexto: d.contexto ?? [], bancoIdBorrador: d.banco_id ?? null, banco,
+    nombrePerfil: d.nombre_perfil ?? null, negocio: d.negocio ?? null, revisar: revisarRespuesta, esBot: esAutorrespuesta,
+  });
+  if (plan.accion === 'ninguna') return;
+  const r = await db.rpc('wa_agente_banco_aprender', {
+    p: { banco_id: plan.banco_id ?? null, disparador: plan.disparador ?? null, variante: plan.variante ?? null, titulo: plan.titulo ?? null, intencion: plan.intencion ?? null },
+  });
+  if (r.error) throw new Error(`wa_agente_banco_aprender: ${r.error.message}`);
+}
+
+const MOTORES = new Set(['recuerdo', 'claude', 'mixto']);
 
 const puenteConfigurado = () => !!Deno.env.get('CONNEXO_BRIDGE_URL') && !!Deno.env.get('CONNEXO_BRIDGE_SECRET');
 /** Dirección pública de los perfiles de Connexo (para el enlace a la vista previa). */
@@ -653,7 +686,15 @@ Deno.serve(async (req) => {
             p_conv: conv, p_texto: typeof body.texto === 'string' ? body.texto : '', p_borrador: borrador, p_msg: r.id, p_user: caller.id,
           });
           if (ap.error) console.error('[agente] no se pudo aprender:', ap.error.message);
-          else aprendizaje = (ap.data as { origen?: string } | null)?.origen ?? null;
+          else {
+            const d = ap.data as DatosAprendizaje | null;
+            aprendizaje = d?.origen ?? null;
+            // Lo que el propietario envió (y el banco no tenía) vuelve al banco. Si falla, el envío y lo aprendido ya están a salvo.
+            if (d?.aprendido && d.origen) {
+              try { await aprenderEnBanco(admin as unknown as BandejaDb, d, typeof body.texto === 'string' ? body.texto : ''); }
+              catch (e2) { console.error('[agente] no se pudo aprender para el banco:', e2 instanceof Error ? e2.message : String(e2)); }
+            }
+          }
         } catch (e) {
           console.error('[agente] no se pudo aprender:', e instanceof Error ? e.message : String(e));
         }
@@ -663,9 +704,20 @@ Deno.serve(async (req) => {
 
     // ── AGENTE de la Bandeja (migración 0017) ─────────────────────────────
     if (body?.action === 'agente_estado') {
-      const { data, error } = await admin.from('wa_agente_config').select('modo, modelo, esfuerzo, espera_seg').eq('id', 1).maybeSingle();
+      // Sin la migración 0018 no existe la columna `motor`: se responde igual (el motor entonces es «claude», como antes).
+      let { data, error } = await admin.from('wa_agente_config').select('modo, modelo, esfuerzo, espera_seg, motor').eq('id', 1).maybeSingle();
+      if (error && /motor/.test(error.message)) {
+        ({ data, error } = await admin.from('wa_agente_config').select('modo, modelo, esfuerzo, espera_seg').eq('id', 1).maybeSingle());
+      }
       if (error) return json({ error: error.message }, 500);
-      return json({ ok: true, clave: claveAnthropicConfigurada(), config: data });
+      const { count } = await admin.from('wa_agente_banco').select('id', { count: 'exact', head: true }).eq('activo', true);
+      return json({ ok: true, clave: claveAnthropicConfigurada(), config: data, banco: count ?? null });
+    }
+
+    if (body?.action === 'agente_banco_sembrar') {
+      const { data, error } = await admin.rpc('wa_agente_banco_sembrar', { p: SEMILLAS });
+      if (error) return json({ error: error.message }, 500);
+      return json({ ok: true, ...(data as Record<string, unknown>) });
     }
 
     if (body?.action === 'agente_generar') {
@@ -688,11 +740,14 @@ Deno.serve(async (req) => {
       const historial = (Array.isArray(body.historial) ? body.historial : []).slice(-8)
         .filter((h: { d?: string; t?: string }) => (h?.d === 'cliente' || h?.d === 'nosotros') && typeof h?.t === 'string' && h.t.trim())
         .map((h: { d: 'cliente' | 'nosotros'; t: string }) => ({ d: h.d, t: h.t.trim().slice(0, 600) }));
-      const [{ data: cfg }, { data: ej }] = await Promise.all([
-        admin.from('wa_agente_config').select('modelo, esfuerzo').eq('id', 1).maybeSingle(),
+      const [cfgRes, { data: ej }] = await Promise.all([
+        admin.from('wa_agente_config').select('modelo, esfuerzo, motor').eq('id', 1).maybeSingle(),
         admin.from('wa_agente_aprendizaje').select('origen, contexto, texto_agente, texto_humano, intencion, nicho, created_at')
           .eq('activo', true).order('created_at', { ascending: false }).limit(60),
       ]);
+      // Sin la migración 0018 la columna `motor` no existe: la consulta falla y se prueba con «claude», como antes.
+      const cfg = cfgRes.error ? null : cfgRes.data;
+      const motor: Motor = MOTORES.has(body.motor) ? body.motor : (MOTORES.has(cfg?.motor) ? cfg!.motor : cfgRes.error ? 'claude' : 'recuerdo');
       const ahora = new Date().toISOString();
       const mensajes = [
         { id: 'p-0', seq: 0, direccion: 'saliente' as const, tipo: 'template', texto: null, ts: ahora, humano: false, agente: false },
@@ -703,9 +758,9 @@ Deno.serve(async (req) => {
       ];
       const ctx: ContextoAgente = {
         conversacion: { id: 'prueba', wa_id: '0', nombre_perfil: null, negocio: nombre, ultimo_entrante_at: ahora, pausado: false, envio_id: null, prospect_id: null },
-        envio: { estado: typeof body.estado === 'string' && /^[a-z_]{3,20}$/.test(body.estado) ? body.estado : 'wa_enviado', rubro: null, theme, username: null, categoria: null, ciudad: null, nombre },
+        envio: { estado: typeof body.estado === 'string' && /^[a-z_]{3,20}$/.test(body.estado) ? body.estado : 'wa_enviado', rubro: null, theme, username: 'tu-negocio', categoria: null, ciudad: null, nombre },
         prospecto: null,
-        config: { modo: 'supervisado', modelo: cfg?.modelo ?? 'claude-opus-5-5', esfuerzo: cfg?.esfuerzo ?? 'medium', espera_seg: 0 },
+        config: { modo: 'supervisado', modelo: cfg?.modelo ?? 'claude-opus-5-5', esfuerzo: cfg?.esfuerzo ?? 'medium', espera_seg: 0, motor },
         mensajes,
         ultimo_entrante: { id: 'p-ultimo', tipo: 'text', texto: mensaje, ts: ahora },
         borrador_pendiente: null,
@@ -716,8 +771,8 @@ Deno.serve(async (req) => {
       if (previa?.accion === 'omitir') return json({ ok: true, accion: 'omitir', texto: '', nota: previa.motivo, intencion: 'otro', confianza: 'alta' });
       if (previa) return json({ ok: true, accion: 'traspasar', texto: '', nota: previa.nota, intencion: previa.intencion, confianza: 'alta' });
       try {
-        const g = await generarRespuesta(ctx, crearDepsAgente().llamarModelo());
-        return json({ ok: true, accion: g.accion, texto: g.texto, nota: g.nota, intencion: g.intencion, confianza: g.confianza, uso: g.uso, modelo: g.modelo });
+        const g = await generarConMotor(ctx, crearDepsAgente());
+        return json({ ok: true, accion: g.accion, texto: g.texto, nota: g.nota, intencion: g.intencion, confianza: g.confianza, uso: g.uso, modelo: g.modelo, motor: g.motor ?? motor });
       } catch (e) {
         if (e instanceof SinClaveAnthropic) return json({ error: e.message, sin_clave: true }, 503);
         throw e;

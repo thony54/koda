@@ -1,11 +1,18 @@
 import { useEffect, useRef, useState } from 'react';
-import { Bot, FlaskConical, KeyRound, Loader2, Sparkles, TriangleAlert } from 'lucide-react';
-import { probarAgente, type ModoAgente, type ResultadoPrueba } from '@/lib/data/agente';
+import { createPortal } from 'react-dom';
+import { Bot, BookOpen, FlaskConical, KeyRound, Loader2, Sparkles, TriangleAlert } from 'lucide-react';
+import { probarAgente, type ModoAgente, type MotorAgente, type ResultadoPrueba } from '@/lib/data/agente';
 import { PLANTILLA_CONNEXO } from '@/lib/data/connexo';
-import { cambiarModo, comprobarClave, refrescarResumen } from '@/lib/bandeja/agenteAcciones';
+import { cambiarModo, cambiarMotor, comprobarClave, refrescarResumen } from '@/lib/bandeja/agenteAcciones';
 import { useAgenteStore } from '@/store/agenteStore';
 import { useUIStore } from '@/store/uiStore';
+import { BancoAgente } from './BancoAgente';
 
+const MOTORES: { id: MotorAgente; titulo: string; detalle: string }[] = [
+  { id: 'recuerdo', titulo: 'Banco de respuestas', detalle: 'Gratis y sin clave. Contesta con lo que Connexo ya sabe y lo que tú ya respondiste, y aprende de ti. Lo que no reconoce te lo deja a ti.' },
+  { id: 'mixto', titulo: 'Banco + Claude', detalle: 'Primero el banco; solo si no reconoce la pregunta, consulta a Claude. Pide la clave de Anthropic y cuesta por uso.' },
+  { id: 'claude', titulo: 'Solo Claude', detalle: 'Redacta cada respuesta con Claude (clave de Anthropic y costo por borrador). También aprende de ti.' },
+];
 const MODOS: { id: ModoAgente; titulo: string; detalle: string }[] = [
   { id: 'apagado', titulo: 'Apagado', detalle: 'No redacta nada.' },
   { id: 'supervisado', titulo: 'Supervisado', detalle: 'Deja un borrador en cada chat; tú lo envías, lo editas o lo descartas. Aprende de lo que haces.' },
@@ -21,6 +28,7 @@ export function ControlAgente() {
   const resumen = useAgenteStore((s) => s.resumen);
   const clave = useAgenteStore((s) => s.clave);
   const [abierto, setAbierto] = useState(false);
+  const [bancoAbierto, setBancoAbierto] = useState(false);
   const [confirmarAuto, setConfirmarAuto] = useState(false);
   const [cambiando, setCambiando] = useState(false);
   const [mensaje, setMensaje] = useState('');
@@ -55,6 +63,15 @@ export function ControlAgente() {
     else toast(modo === 'automatico' ? 'Agente en automático: responderá solo cuando esté seguro.' : modo === 'supervisado' ? 'Agente en modo supervisado.' : 'Agente apagado.', 'success');
   }
 
+  async function elegirMotor(motor: MotorAgente) {
+    if (motor === config?.motor) return;
+    setCambiando(true);
+    const r = await cambiarMotor(motor);
+    setCambiando(false);
+    if (!r.ok) toast(r.error ?? 'No se pudo cambiar el motor.', 'error');
+    else toast(motor === 'recuerdo' ? 'El agente responde con el banco de respuestas (gratis).' : motor === 'mixto' ? 'El agente usa el banco y, si no reconoce la pregunta, a Claude.' : 'El agente responde con Claude.', 'success');
+  }
+
   async function probar() {
     if (!mensaje.trim()) return;
     setProbando(true);
@@ -66,6 +83,9 @@ export function ControlAgente() {
 
   const decisiones = resumen ? resumen.aprobados + resumen.editados + resumen.descartados : 0;
   const listo = resumen?.acierto != null && decisiones >= 20 && resumen.acierto >= 80;
+  // Sin la migración 0018 no hay motor ni banco: el agente funciona como antes (Claude) y esta parte no aparece.
+  const conBanco = config.motor !== undefined;
+  const usaClaude = !conBanco || config.motor !== 'recuerdo';
 
   return (
     <div ref={caja} className="relative">
@@ -81,11 +101,32 @@ export function ControlAgente() {
       </button>
 
       {abierto && (
-        <div className="absolute right-0 z-50 mt-2 w-[min(92vw,400px)] rounded-lg border border-line-strong bg-surface-raised p-4 shadow-2xl" role="dialog" aria-label="Agente de respuestas">
+        <div className="absolute right-0 z-50 mt-2 max-h-[calc(100vh-6rem)] w-[min(92vw,400px)] overflow-y-auto rounded-lg border border-line-strong bg-surface-raised p-4 shadow-2xl" role="dialog" aria-label="Agente de respuestas">
           <p className="font-heading text-[15px] font-semibold text-ink-primary">Agente de respuestas</p>
           <p className="mt-0.5 text-[12.5px] text-ink-secondary">Redacta la respuesta a cada negocio que escribe: corta, natural y sin emojis.</p>
 
-          {clave === false && (
+          {conBanco && (
+            <div className="mt-3">
+              <p className="text-[12px] font-medium uppercase tracking-wide text-ink-muted">Quién redacta</p>
+              <div className="mt-1.5 space-y-1.5" role="radiogroup" aria-label="Quién redacta las respuestas">
+                {MOTORES.map((m) => {
+                  const activo = config.motor === m.id;
+                  return (
+                    <button key={m.id} role="radio" aria-checked={activo} disabled={cambiando} onClick={() => void elegirMotor(m.id)}
+                      className={`w-full rounded-md border px-3 py-2 text-left transition-colors ${activo ? 'border-accent/50 bg-accent/10' : 'border-line hover:bg-veil/[0.05]'} disabled:opacity-60`}>
+                      <span className="flex items-center gap-2 text-[13px] font-medium text-ink-primary">{m.titulo}{m.id === 'recuerdo' && <span className="rounded-full border border-success/40 px-1.5 py-px text-[10.5px] font-normal text-success">gratis</span>}</span>
+                      <span className="mt-0.5 block text-[12px] text-ink-secondary">{m.detalle}</span>
+                    </button>
+                  );
+                })}
+              </div>
+              <button onClick={() => { setBancoAbierto(true); setAbierto(false); }} className="mt-2 inline-flex w-full items-center justify-center gap-1.5 rounded-md border border-line px-3 py-1.5 text-[12.5px] font-medium text-ink-secondary hover:bg-veil/[0.06] hover:text-ink-primary">
+                <BookOpen className="h-3.5 w-3.5" /> Ver y editar las respuestas{resumen?.banco != null ? ` (${resumen.banco})` : ''}
+              </button>
+            </div>
+          )}
+
+          {usaClaude && clave === false && (
             <div className="mt-3 flex items-start gap-2 rounded-md border border-warning/40 bg-warning/10 p-2.5 text-[12px] text-warning">
               <KeyRound className="mt-0.5 h-3.5 w-3.5 shrink-0" />
               <div className="min-w-0">
@@ -138,6 +179,13 @@ export function ControlAgente() {
             {resumen ? (
               <ul className="mt-1.5 space-y-0.5 text-ink-secondary">
                 <li><span className="tabular-nums text-ink-primary">{resumen.aprendidos}</span> respuestas tuyas guardadas</li>
+                {conBanco && resumen.banco != null && (
+                  <li>
+                    <span className="tabular-nums text-ink-primary">{resumen.banco}</span> en el banco
+                    {resumen.banco_aprendidas ? <>, <span className="tabular-nums text-ink-primary">{resumen.banco_aprendidas}</span> aprendidas de ti</> : null}
+                    {resumen.banco_confiables ? <>, <span className="tabular-nums text-ink-primary">{resumen.banco_confiables}</span> ya pueden ir solas</> : null}
+                  </li>
+                )}
                 <li>
                   Acierto: <span className="tabular-nums text-ink-primary">{resumen.acierto != null ? `${resumen.acierto} %` : '—'}</span>
                   {decisiones > 0 && <> · {resumen.aprobados} tal cual, {resumen.editados} editados, {resumen.descartados} descartados</>}
@@ -177,7 +225,7 @@ export function ControlAgente() {
                   <>
                     <p className="whitespace-pre-wrap break-words text-ink-primary">{prueba.texto}</p>
                     <p className="mt-1.5 text-[11.5px] text-ink-muted">
-                      {[prueba.intencion, prueba.confianza ? `confianza ${prueba.confianza}` : null, prueba.uso?.salida ? `${prueba.uso.salida} tokens` : null].filter(Boolean).join(' · ')}
+                      {[prueba.motor === 'recuerdo' ? 'del banco' : prueba.motor === 'claude' ? 'con Claude' : null, prueba.intencion, prueba.confianza ? `confianza ${prueba.confianza}` : null, prueba.uso?.salida ? `${prueba.uso.salida} tokens` : null].filter(Boolean).join(' · ')}
                     </p>
                     {prueba.nota && <p className="text-[11.5px] text-ink-muted">{prueba.nota}</p>}
                   </>
@@ -189,6 +237,9 @@ export function ControlAgente() {
           </div>
         </div>
       )}
+
+      {/* Va fuera del panel (y fuera de cualquier contenedor con filtros) para que cubra toda la pantalla. */}
+      {bancoAbierto && createPortal(<BancoAgente abierto={bancoAbierto} onCerrar={() => setBancoAbierto(false)} />, document.body)}
     </div>
   );
 }

@@ -202,12 +202,29 @@ const AUTO_PATRONES: RegExp[] = [
   /bienvenid[oa]s? a /,
   /como (podemos|puedo) (ayudarte|ayudarle|ayudarlo|servirte|servirle)\??\s*$/,
   /un asesor (se comunicara|te atendera|le atendera)/,
+  // Saludos, menús y cuestionarios del WhatsApp Business de los negocios (vistos en la 4.ª oleada, 2026-11-13):
+  // «Bienvenid@/Bienvenido(a)…», «¿Cómo podemos ayudar?», «déjeme saber su nombre y en qué le puedo ayudar», «Te saluda Andrés de…»,
+  // «¿Para qué fechas buscas hospedaje?», «Nombre de alumno / Edad / Instrumento», «Escríbeme por aquí y te agendo al instante».
+  /\bbienvenid(o|a|@|os|as)(\(a\))?(?![a-z0-9])/,
+  /como (podemos|puedo|te puedo|le puedo|les puedo) (ayudar|servir)/,
+  /en que (le |te |les )?(puedo|podemos) (ayudar|servir)/,
+  /(dejeme|dejame|haznos|hazme) saber (su|tu|el|la|como|en que|que)/,
+  /ayud(a|e)me con (tu|su|la siguiente|el siguiente|los siguientes)/,
+  /escribe(me|nos) por aqui|te agendo al instante|para brindarte|asesoria personalizada/,
+  /\b(le|te|les) saluda\b|saludos de parte de|\b(le|te|les) desea un excelente dia/,
+  /con gusto (le|te|les) ayudamos|cuenta(me|nos)\s*:/,
+  /fechas? de (ingreso|llegada)|nombre de(l)? alumno|para cuantas personas/,
 ];
+// Mensajes largos de catálogo/horarios/promociones: un negocio con su respuesta automática, no una persona que contesta.
+const CATALOGO_AUTO = /(https?:\/\/|\blunes a\b|horario|promociones|ubicacion|contamos con)/;
+const MENCIONA_CONNEXO = /\b(connexo|demo|perfil|pagina web|mi pagina|tu pagina|su pagina)\b/;
 // Una persona de verdad que además de saludar pregunta o muestra interés NO es un bot: se responde.
 const SEÑAL_HUMANA = /\b(me interesa|me gustaria|quisiera|quiero (saber|ver|probar|mas|la)|cuanto (cuesta|vale|es|sale)|estoy interesad[oa]|tengo una (duda|pregunta)|enviame|mandame)\b/;
 export const esAutorrespuesta = (texto: string | null | undefined): boolean => {
   const t = norm(String(texto ?? ''));
-  return t.length > 0 && AUTO_PATRONES.some((re) => re.test(t)) && !SEÑAL_HUMANA.test(t);
+  if (t.length === 0 || SEÑAL_HUMANA.test(t)) return false;
+  if (AUTO_PATRONES.some((re) => re.test(t))) return true;
+  return t.length > 200 && CATALOGO_AUTO.test(t) && !MENCIONA_CONNEXO.test(t);
 };
 
 /** Toques del botón del saludo: los atiende Connexo (activa el perfil o agradece); el agente no dice nada. */

@@ -93,7 +93,8 @@ const ES_TIENDA = /(^| )store$/;
 // no dice el nicho, pero el NOMBRE casi siempre sí («Imprenta Quantica», «Quik Print»). Solo se consulta si la
 // categoría no se reconoció. El orden importa: gana la primera que coincide.
 // Fotógrafos (incluye los que Google nombra en inglés: «Wedding Photographer», «Photostudio»), psicólogos, nutricionistas y coaches.
-const PISTA_PROFESIONALES = /fotograf|photograph|photo ?studio|psicolog|nutricion|nutriolog|dietist|\bcoach\b/;
+// «Foto Estudio Miguels» (muy común en Ecuador) también es fotografía: coincide con FOTO_RE de Connexo (`foto.?estudio`).
+const PISTA_PROFESIONALES = /fotograf|photograph|photo ?studio|foto ?estudio|estudio ?foto|psicolog|nutricion|nutriolog|dietist|\bcoach\b/;
 // Tipos genéricos que Google pone a un profesional independiente (un nutricionista sale como «consultant»): si el NOMBRE
 // dice su oficio, manda el nombre y no la categoría (si no, un nutricionista recibiría la plantilla de Ecommerce).
 const CATEGORIAS_GENERICAS = new Set(['consultant', 'consulting', 'company', 'office', 'corporate office', 'service', 'establishment']);

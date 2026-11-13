@@ -101,7 +101,7 @@ export function evaluarEnvio(p: ProspectoEnvio, ctx: ContextoEnvio): Omision | n
   const celular = celularEC(p.whatsapp);
   if (!celular) return { codigo: 'sin_celular', motivo: 'No tiene un celular con WhatsApp (los fijos no reciben).' };
   if (!ctx.rubro) {
-    return { codigo: 'sin_rubro', motivo: 'No se reconoce su rubro: Connexo no tiene una plantilla para él. Clasifícalo antes de enviarlo.' };
+    return { codigo: 'sin_rubro', motivo: 'No se reconoce su rubro o Connexo no tiene una plantilla para él (la Estándar ya no se usa: coaches, consultores y similares no se envían). Clasifícalo antes de enviarlo.' };
   }
 
   const otro = (ctx.conMismoCelular ?? []).find(

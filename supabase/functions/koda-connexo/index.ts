@@ -36,7 +36,7 @@
 //   CONNEXO_WA_URL         (opcional) …/functions/v1/kodaWhatsApp; si falta se deduce de CONNEXO_BRIDGE_URL
 import { corsHeaders, json } from '../_shared/cors.ts';
 import { getAdminClient, requireCaller, type Caller } from '../_shared/supabaseAdmin.ts';
-import { rubroDe } from '../_shared/rubros.ts';
+import { rubroParaEnvio } from '../_shared/rubros.ts';
 import {
   celularEC, ESTADOS_CONTACTADOS, evaluarEnvio, saludoYaEnviado, type EnvioRegistrado,
 } from '../_shared/connexoEnvio.ts';
@@ -352,7 +352,7 @@ Deno.serve(async (req) => {
         const p = porId.get(id);
         if (!p) { resultados.push({ prospect_id: id, resultado: 'omitido', codigo: 'no_existe', motivo: 'No existe.' }); continue; }
         const base = { prospect_id: p.id, nombre: p.nombre };
-        const rubro = rubroDe(p.categoria, p.nombre);
+        const rubro = rubroParaEnvio(p.categoria, p.nombre);
         const celular = celularEC(p.whatsapp);
         const omision = evaluarEnvio(p, {
           esPropietario: caller.esPropietario,
@@ -391,7 +391,7 @@ Deno.serve(async (req) => {
         const c = contactos.get(p.id) ?? {};
         const jobId = jobDe.get(p.id) ?? null;
         const busqueda = jobId ? (nombreJob.get(jobId) ?? null) : null;
-        const rubro = rubroDe(p.categoria, p.nombre);
+        const rubro = rubroParaEnvio(p.categoria, p.nombre);
         const d = dueno.get(p.owner_id);
         const ahora = new Date().toISOString();
 

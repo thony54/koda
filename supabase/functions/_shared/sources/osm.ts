@@ -61,7 +61,7 @@ export const RUBRO_TAGS: Record<string, string[]> = {
   restaurantes: ['amenity~"restaurant|fast_food"'],
   cafe_bar: ['amenity~"cafe|bar|pub|ice_cream|nightclub"'],
   belleza: ['shop~"hairdresser|beauty"', 'craft~"hairdresser"'],
-  salud: ['amenity~"pharmacy|clinic|dentist|doctors|veterinary"'],
+  salud: ['amenity~"pharmacy|clinic|dentist|doctors|veterinary"', 'healthcare~"psychotherapist|counselling|nutrition_counselling"'],
   gimnasios: ['leisure~"fitness_centre|sports_centre|dance"'],
   hoteles: ['tourism~"hotel|guest_house|hostel|motel"'],
   tiendas: ['shop'],
@@ -71,7 +71,7 @@ export const RUBRO_TAGS: Record<string, string[]> = {
   musicos: ['amenity~"music_school"', 'shop~"musical_instrument"', 'studio~"audio|music"'],
   sublimados: ['shop~"copyshop|fabric"', 'craft~"printer|embroiderer"'],
   librerias: ['shop~"books"'],   // plantilla Librería de Connexo (themes books)
-  profesionales: ['craft~"photographer|photographic_laboratory"', 'healthcare~"psychotherapist|counselling|nutrition_counselling"', 'office~"therapist|coaching|translator|photographer"'],
+  profesionales: ['craft~"photographer|photographic_laboratory"', 'office~"therapist|coaching|translator|photographer"'],
 };
 
 // Conjunto por defecto cuando el job no especifica rubros: todo lo anterior.

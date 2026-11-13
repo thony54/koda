@@ -27,6 +27,9 @@ const GRUPOS: Record<string, string[]> = {
     'veterinaria', 'consultorio medico', 'odontologia', 'optica', 'medico',
     'doctor', 'medical_clinic', 'dental_clinic', 'medical_center', 'medical_lab', 'general_hospital',
     'veterinary_care',
+    // Nutricionistas, psicólogos y terapeutas van a Salud (plantilla Médica): la plantilla Estándar ya no se usa (2026-11-13).
+    'psychologist', 'psychotherapist', 'therapist', 'nutritionist', 'dietitian', 'nutrition_counselling', 'counselling',
+    'psicologo', 'psicologa', 'psicologia', 'nutricionista', 'nutricion', 'dietista', 'terapeuta',
   ],
   gimnasios: [
     'fitness_centre', 'sports_centre', 'dance', 'gym', 'yoga', 'gimnasio', 'crossfit', 'pilates',
@@ -72,9 +75,9 @@ const GRUPOS: Record<string, string[]> = {
     'book_store', 'bookstore', 'book_shop', 'books', 'libreria', 'librerias', 'libros', 'libreria papeleria',
   ],
   profesionales: [
-    'photographer', 'photographic_laboratory', 'psychotherapist', 'psychologist', 'therapist', 'coach', 'coaching',
-    'tutor', 'translator', 'nutritionist', 'fotografo', 'fotografia', 'estudio fotografico', 'psicologo',
-    'psicologa', 'nutricionista', 'traductor', 'diseno grafico', 'freelance', 'consultor', 'profesor particular',
+    'photographer', 'photographic_laboratory', 'coach', 'coaching',
+    'tutor', 'translator', 'fotografo', 'fotografia', 'estudio fotografico',
+    'traductor', 'diseno grafico', 'freelance', 'consultor', 'profesor particular',
     'clases particulares', 'wedding_planner', 'photography_studio',
   ],
 };
@@ -94,7 +97,11 @@ const ES_TIENDA = /(^| )store$/;
 // categoría no se reconoció. El orden importa: gana la primera que coincide.
 // Fotógrafos (incluye los que Google nombra en inglés: «Wedding Photographer», «Photostudio»), psicólogos, nutricionistas y coaches.
 // «Foto Estudio Miguels» (muy común en Ecuador) también es fotografía: coincide con FOTO_RE de Connexo (`foto.?estudio`).
-const PISTA_PROFESIONALES = /fotograf|photograph|photo ?studio|foto ?estudio|estudio ?foto|psicolog|nutricion|nutriolog|dietist|\bcoach\b/;
+const PISTA_PROFESIONALES = /fotograf|photograph|photo ?studio|foto ?estudio|estudio ?foto|\bcoach\b/;
+// Nutricionistas, psicólogos y terapeutas → Salud (plantilla Médica).
+const PISTA_SALUD_PRO = /psicolog|psicoterap|nutricion|nutriolog|dietist|terapeut/;
+// Fotografía (igual que FOTO_RE de Connexo): es lo único de «profesionales» que tiene plantilla propia (Fotografía).
+const FOTO_RE = /photograph|photo.?(studio|lab)|portrait.?studio|fotograf|foto.?estudio|estudio.?foto|laboratorio.?foto/;
 // Tipos genéricos que Google pone a un profesional independiente (un nutricionista sale como «consultant»): si el NOMBRE
 // dice su oficio, manda el nombre y no la categoría (si no, un nutricionista recibiría la plantilla de Ecommerce).
 const CATEGORIAS_GENERICAS = new Set(['consultant', 'consulting', 'company', 'office', 'corporate office', 'service', 'establishment']);
@@ -103,6 +110,7 @@ const PISTAS_DE_NOMBRE: [string, RegExp][] = [
   ['sublimados', /imprent|print|sublim|serigraf|estampad|gigantograf|rotulo|copiad|bordad/],
   ['librerias', /libreria|\blibros\b|bookstore|bookshop/],
   ['musicos', /\bmusic|sonido|grabacion|mariachi|orquesta|\bdj\b|conservatorio|rockademia|escuela de rock/],
+  ['salud', PISTA_SALUD_PRO],
   ['profesionales', PISTA_PROFESIONALES],
   ['belleza', /barber|peluquer|salon de belleza|centro de estetica|\bnails?\b|manicur|\bspa\b/],
   ['salud', /clinica|consultorio|dental|odontolog|\bmedic|laboratorio clinico/],
@@ -122,7 +130,11 @@ const PISTAS_DE_NOMBRE: [string, RegExp][] = [
 export function rubroDe(categoria: string | null | undefined, nombre?: string | null): string | null {
   if (categoria) {
     const n = norm(categoria);
-    if (nombre && CATEGORIAS_GENERICAS.has(n) && PISTA_PROFESIONALES.test(norm(nombre))) return 'profesionales';
+    if (nombre && CATEGORIAS_GENERICAS.has(n)) {
+      const nn = norm(nombre);
+      if (PISTA_SALUD_PRO.test(nn)) return 'salud';
+      if (PISTA_PROFESIONALES.test(nn)) return 'profesionales';
+    }
     const directo = POR_VALOR.get(n);
     if (directo) return directo;
     if (ES_RESTAURANTE.test(n)) return 'restaurantes';
@@ -133,4 +145,15 @@ export function rubroDe(categoria: string | null | undefined, nombre?: string | 
     for (const [grupo, re] of PISTAS_DE_NOMBRE) if (re.test(nn)) return grupo;
   }
   return null;
+}
+
+/**
+ * Rubro con el que se ENVÍA un negocio a Connexo. Igual que `rubroDe`, pero la plantilla Estándar (rubro «profesionales») ya no
+ * se usa (2026-11-13): de ese grupo solo pasan los fotógrafos y estudios fotográficos (plantilla Fotografía); un coach, un
+ * traductor o un consultor quedan «sin rubro» hasta que tengan una plantilla propia.
+ */
+export function rubroParaEnvio(categoria: string | null | undefined, nombre?: string | null): string | null {
+  const r = rubroDe(categoria, nombre);
+  if (r !== 'profesionales') return r;
+  return FOTO_RE.test(norm(`${categoria ?? ''} ${nombre ?? ''}`)) ? r : null;
 }

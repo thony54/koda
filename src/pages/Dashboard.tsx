@@ -10,6 +10,8 @@ import { PageHeader } from '@/components/layout/PageHeader';
 import { ScoreBadge } from '@/components/prospects/ScoreBadge';
 import { useAuth } from '@/hooks/useAuth';
 import { useDashboard } from '@/hooks/useDashboard';
+import { useGastoMes } from '@/hooks/useGasto';
+import { GastoApis } from '@/components/dashboard/GastoApis';
 import { useMiEspacio, useMiResumen } from '@/hooks/useEspacio';
 import { ParaTi } from '@/components/dashboard/ParaTi';
 import { useScopeStore } from '@/store/scopeStore';
@@ -26,6 +28,7 @@ const BANDA_META: Record<string, { color: string; rango: string }> = {
 export default function Dashboard() {
   const { profile, isOwner } = useAuth();
   const { data, isLoading } = useDashboard();
+  const { data: gasto } = useGastoMes();
   const { data: espacio, isSuccess: espacioListo } = useMiEspacio();
   const { data: resumen } = useMiResumen();
   const scopeOwner = useScopeStore((s) => s.ownerId);
@@ -75,8 +78,15 @@ export default function Dashboard() {
             <Kpi label="Prospectos totales" value={data.total} icon={<Users className="h-4 w-4" />} />
             <Kpi label="Nuevos esta semana" value={data.nuevosSemana} sub={`${data.nuevosHoy} hoy`} icon={<TrendingUp className="h-4 w-4" />} />
             <Kpi label="Calientes sin asignar" value={data.calientesSinAsignar} icon={<Flame className="h-4 w-4" />} accent />
-            <Kpi label="Costo APIs (mes)" value={formatUSD(data.costoApisMes)} icon={<DollarSign className="h-4 w-4" />} />
+            <Kpi
+              label="Gasto APIs (mes)"
+              value={gasto ? formatUSD(gasto.total) : '—'}
+              sub={gasto ? (gasto.whatsapp ? 'Meta + Google · estimado' : 'Google · estimado') : undefined}
+              icon={<DollarSign className="h-4 w-4" />}
+            />
           </div>
+
+          <GastoApis />
 
           <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
             {/* Gráfico 30 días */}

@@ -129,7 +129,6 @@ export interface DashboardStats {
   nuevosSemana: number;
   calientesSinAsignar: number;
   clientes: number;
-  costoApisMes: number;
   porDia: { fecha: string; cantidad: number }[];
   topCalientes: Prospect[];
   porBanda: { banda: string; cantidad: number }[];

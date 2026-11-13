@@ -306,7 +306,6 @@ export async function getDashboardStats(): Promise<DashboardStats> {
     nuevosSemana,
     calientesSinAsignar,
     clientes,
-    costoApisMes: 0, // se calcula de job_runs cuando exista ingesta (Fase 2)
     porDia,
     topCalientes,
     porBanda,
